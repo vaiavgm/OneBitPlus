@@ -1,7 +1,9 @@
 #include "VaiaOneBitPlus.h"
-#include "IPlug_include_in_plug_src.h"
-#include "LFO.h"
+#include <IPlug_include_in_plug_src.h>
+#include <LFO.h>
 #include <IPlugLogger.h>
+#include <IControls.h>
+
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))

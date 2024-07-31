@@ -2,11 +2,25 @@
 
 #define MY_PRINTF(...) {char buf[512]; sprintf(buf, __VA_ARGS__);  OutputDebugString(buf);}
 
-#include "MidiSynth.h"
-#include "Oscillator.h"
-#include "ADSREnvelope.h"
-#include "Smoothers.h"
-#include "LFO.h"
+#include <IPlugLogger.h>
+#include <IPlugMidi.h>
+
+#include <heapbuf.h>
+#include <ptrlist.h>
+#include <stdlib.h>
+#include <array>
+#include <SynthVoice.h>
+#include <VoiceAllocator.h>
+#include <IPlugConstants.h>
+
+
+#include <MidiSynth.h>
+#include <ADSREnvelope.h>
+#include <Smoothers.h>
+#include <LFO.h>
+#include <cstdint>
+
+#include "VaiaOneBitPlus.h"
 #include "VaiaOscillator.h"
 
 
@@ -18,14 +32,14 @@ enum EModulations
   kNumModulations,
 };
 
-enum class osc_algorithm
+enum class OSC_Algorithm
 {
   ALGO_FLIP_ONE, //This one is not quite correct, as it outputs some zeroes where it shouldn't
   ALGO_MOD_TWO,
   ALGO_PIN_PULSE, // just add and clamp
 };
 
-const osc_algorithm used_algo = osc_algorithm::ALGO_PIN_PULSE;
+const OSC_Algorithm used_algo = OSC_Algorithm::ALGO_PIN_PULSE;
 
 template<typename T>
 class OneBitPlusDSP
@@ -36,10 +50,8 @@ public:
   {
 
   public:
-    Voice() : mAMPEnv("gain", [&]() { mOSC.Reset(); }) // capture ok on RT thread?
-    {
-      //      DBGMSG("new Voice: %i control inputs.\n", static_cast<int>(mInputs.size()));
-    }
+    Voice() : mAMPEnv("gain", [&]() { mOSC.Reset(); })
+    {}
 
     bool GetBusy() const override
     {
@@ -65,7 +77,7 @@ public:
     void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override // NOSONAR (hidden function)
     {
       // inputs to the synthesizer can just fetch a value every block, like this:
-//      double gate = mInputs[kVoiceControlGate].endValue;
+
       double pitch = mInputs[kVoiceControlPitch].endValue;
       double pitchBend = mInputs[kVoiceControlPitchBend].endValue;
       double velocity = mInputs[kVoiceControlGate].endValue * 127.f;
@@ -119,7 +131,7 @@ public:
 
           switch (algo)
           {
-          case osc_algorithm::ALGO_FLIP_ONE:
+          case OSC_Algorithm::ALGO_FLIP_ONE:
 
             oldOutput = outputs[0][i] > 0;
             newOutput = base > 0;
@@ -144,7 +156,7 @@ public:
               outputs[0][i] = outputs[1][i] = base;
             }
             break;
-          case osc_algorithm::ALGO_MOD_TWO:
+          case OSC_Algorithm::ALGO_MOD_TWO:
             if (base > 0)
             {
               temp += 0.1;
@@ -156,7 +168,7 @@ public:
 
             outputs[0][i] = outputs[1][i] = temp;
             break;
-          case osc_algorithm::ALGO_PIN_PULSE:
+          case OSC_Algorithm::ALGO_PIN_PULSE:
 
             oldOutput = outputs[0][i] > 0.0f;
             newOutput = base > 0.0f;
@@ -194,7 +206,7 @@ public:
 
     VaiaOscillator<T> mOSC;
     ADSREnvelope<T> mAMPEnv;
-    osc_algorithm algo = used_algo;
+    OSC_Algorithm algo = used_algo;
     WDL_TypedBuf<float> mTimbreBuffer;
     double mModWheel{ 0.0 };
 
@@ -220,8 +232,6 @@ public:
       // add a voice to Zone 0.
       mSynth.AddVoice(new Voice(), 0);
     }
-    // some MidiSynth API examples:
-    // mSynth.SetKeyToPitchFn([](int k){return (k - 69.)/24.;}); // quarter-tone scale
   }
 
   void ProcessBlock(T** inputs, T** outputs, int nOutputs, int nFrames, double qnPos = 0., bool transportIsRunning = false, double tempo = 120.)
@@ -239,10 +249,10 @@ public:
     double eps = 0.001;
 
 
-    osc_algorithm algo2 = osc_algorithm::ALGO_MOD_TWO;
+    OSC_Algorithm algo2 = OSC_Algorithm::ALGO_MOD_TWO;
     switch (algo2)
     {
-    case osc_algorithm::ALGO_FLIP_ONE:
+    case OSC_Algorithm::ALGO_FLIP_ONE:
 
       for (int s = 0; s < nFrames; s++)
       {
@@ -265,7 +275,7 @@ public:
 
       }
       break;
-    case osc_algorithm::ALGO_MOD_TWO:
+    case OSC_Algorithm::ALGO_MOD_TWO:
 
       for (int s = 0; s < nFrames; s++)
       {
@@ -296,7 +306,7 @@ public:
 
       }
       break;
-    case osc_algorithm::ALGO_PIN_PULSE:
+    case OSC_Algorithm::ALGO_PIN_PULSE:
       for (int s = 0; s < nFrames; s++)
       {
         T smoothedGain = mModulations.GetList()[kModGainSmoother][s];
@@ -386,7 +396,7 @@ public:
 
 public:
 
-  osc_algorithm algo = used_algo;
+  OSC_Algorithm algo = used_algo;
 
   MidiSynth mSynth{ VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize };
   WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
