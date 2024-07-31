@@ -9,9 +9,6 @@
 #include "LFO.h"
 #include "VaiaOscillator.h"
 
-double max_gain_mod = 0.0f;
-
-using namespace iplug;
 
 enum EModulations
 {
@@ -37,9 +34,9 @@ public:
 #pragma mark - Voice
   class Voice : public SynthVoice
   {
+
   public:
-    Voice()
-      : mAMPEnv("gain", [&]() { mOSC.Reset(); }) // capture ok on RT thread?
+    Voice() : mAMPEnv("gain", [&]() { mOSC.Reset(); }) // capture ok on RT thread?
     {
       //      DBGMSG("new Voice: %i control inputs.\n", static_cast<int>(mInputs.size()));
     }
@@ -65,10 +62,7 @@ public:
     }
 
 
-    double pwm_phase = 0.0f;
-    double pwm_phase_speed = 0.00001f;
-
-    void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
+    void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override // NOSONAR (hidden function)
     {
       // inputs to the synthesizer can just fetch a value every block, like this:
 //      double gate = mInputs[kVoiceControlGate].endValue;
@@ -114,14 +108,8 @@ public:
         }
         else
         {
-          
-          double pwmFunc = (0.025f - adsr_envelope + 0.756f) * osc1Freq / 440.0f + mModWheel ;
 
-          if (i == 0 && adsr_envelope > 0.0f)
-          {
-            MY_PRINTF("%2.3f\n", adsr_envelope);
-          }
-
+          double pwmFunc = (0.025f - adsr_envelope + 0.756f) * osc1Freq / 440.0f + mModWheel;
 
           mOSC.SetPWM(pwmFunc);
           auto base = mOSC.Process(osc1Freq);
@@ -178,7 +166,7 @@ public:
               outputs[0][i] = 1.0f;
               outputs[1][i] = 1.0f;
             }
-           
+
 
             break;
           }
@@ -195,11 +183,6 @@ public:
       mTimbreBuffer.Resize(blockSize);
     }
 
-    void SetProgramNumber(int pgm) override
-    {
-      //TODO:
-    }
-
     // this is called by the VoiceAllocator to set generic control values.
     void SetControl(int controlNumber, float value) override
     {
@@ -209,14 +192,12 @@ public:
       }
     }
 
-  public:
     VaiaOscillator<T> mOSC;
     ADSREnvelope<T> mAMPEnv;
     osc_algorithm algo = used_algo;
-
-  private:
     WDL_TypedBuf<float> mTimbreBuffer;
     double mModWheel{ 0.0 };
+
 
     // noise generator for test
     uint32_t mRandSeed = 0;
@@ -228,7 +209,6 @@ public:
       uint32_t temp = ((mRandSeed >> 9) & 0x007FFFFF) | 0x3F800000;
       return (*reinterpret_cast<float*>(&temp)) * 2.f - 3.f;
     }
-
   };
 
 public:
@@ -252,7 +232,7 @@ public:
       memset(outputs[i], 0, nFrames * sizeof(T));
     }
 
-    mParamSmoother.ProcessBlock(mParamsToSmooth, mModulations.GetList(), nFrames);
+    mParamSmoother.ProcessBlock(mParamsToSmooth.data(), mModulations.GetList(), nFrames);
     mLFO.ProcessBlock(mModulations.GetList()[kModLFO], nFrames, qnPos, transportIsRunning, tempo);
     mSynth.ProcessBlock(mModulations.GetList(), outputs, 0, nOutputs, nFrames);
 
@@ -412,6 +392,6 @@ public:
   WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
   WDL_PtrList<T> mModulations; // Ptrlist for global modulations
   LogParamSmooth<T, kNumModulations> mParamSmoother;
-  sample mParamsToSmooth[kNumModulations];
+  std::array<sample, kNumModulations> mParamsToSmooth{};
   LFO<T> mLFO;
 };

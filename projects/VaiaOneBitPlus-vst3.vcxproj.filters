@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="..\VaiaOneBitPlus.cpp" />
     <ClCompile Include="..\..\..\IGraphics\IGraphics.cpp">
       <Filter>IGraphics</Filter>
     </ClCompile>
@@ -140,10 +139,14 @@
     <ClCompile Include="..\..\..\IGraphics\IGraphicsEditorDelegate.cpp">
       <Filter>IGraphics</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\VaiaOneBitPlus.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\VaiaOscillator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="../config.h" />
-    <ClInclude Include="..\VaiaOneBitPlus.h" />
     <ClInclude Include="..\resources\resource.h">
       <Filter>resources</Filter>
     </ClInclude>
@@ -372,13 +375,20 @@
     <ClInclude Include="..\..\..\IPlug\IPlugPluginBase.h">
       <Filter>IPlug</Filter>
     </ClInclude>
-    <ClInclude Include="..\VaiaOneBitPlus_DSP.h" />
-    <ClInclude Include="..\VaiaOscillator.h" />
+    <ClInclude Include="..\src\config.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\VaiaOneBitPlus.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\VaiaOneBitPlus_DSP.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\VaiaOscillator.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="resources">
-      <UniqueIdentifier>{74cd52f2-b3b1-45bf-b24a-5e60e66b70de}</UniqueIdentifier>
-    </Filter>
     <Filter Include="IGraphics">
       <UniqueIdentifier>{30a371c3-625a-4283-948b-afc6665bd15e}</UniqueIdentifier>
     </Filter>
@@ -438,6 +448,12 @@
     </Filter>
     <Filter Include="IPlug\VST3\VST3_SDK\plugininterfaces\base">
       <UniqueIdentifier>{5f06b03e-5093-46c0-9513-efb4e494c857}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{2232c214-573e-49dd-9136-66aaf38d03c7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="resources">
+      <UniqueIdentifier>{74cd52f2-b3b1-45bf-b24a-5e60e66b70de}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

@@ -1,0 +1,6 @@
+{
+  "sonarlint.exclude": [
+    "**/IPlug/**",
+    "**/IGraphics/**"
+  ]
+}

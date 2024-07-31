@@ -206,6 +206,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(VST3_INC_PATHS);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -253,7 +254,6 @@
     <PostBuildEvent />
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="../config.h" />
     <ClInclude Include="..\..\..\Dependencies\IPlug\VST3_SDK\base\source\classfactoryhelpers.h" />
     <ClInclude Include="..\..\..\Dependencies\IPlug\VST3_SDK\base\source\fbuffer.h" />
     <ClInclude Include="..\..\..\Dependencies\IPlug\VST3_SDK\base\source\fcleanup.h" />
@@ -329,10 +329,11 @@
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_Parameter.h" />
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.h" />
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_View.h" />
-    <ClInclude Include="..\VaiaOneBitPlus.h" />
-    <ClInclude Include="..\VaiaOneBitPlus_DSP.h" />
+    <ClInclude Include="..\src\config.h" />
+    <ClInclude Include="..\src\VaiaOneBitPlus.h" />
+    <ClInclude Include="..\src\VaiaOneBitPlus_DSP.h" />
+    <ClInclude Include="..\src\VaiaOscillator.h" />
     <ClInclude Include="..\resources\resource.h" />
-    <ClInclude Include="..\VaiaOscillator.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\Dependencies\IPlug\VST3_SDK\base\source\baseiids.cpp" />
@@ -395,7 +396,8 @@
     <ClCompile Include="..\..\..\IPlug\IPlugTimer.cpp" />
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3.cpp" />
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.cpp" />
-    <ClCompile Include="..\VaiaOneBitPlus.cpp" />
+    <ClCompile Include="..\src\VaiaOneBitPlus.cpp" />
+    <ClCompile Include="..\src\VaiaOscillator.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\resources\main.rc" />

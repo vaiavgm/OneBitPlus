@@ -40,13 +40,11 @@ enum EControlTags
   kNumCtrlTags
 };
 
-using namespace iplug;
-using namespace igraphics;
 
 class VaiaOneBitPlus final : public Plugin
 {
 public:
-  VaiaOneBitPlus(const InstanceInfo& info);
+  explicit VaiaOneBitPlus(const InstanceInfo& info);
 
 #if IPLUG_DSP // http://bit.ly/2S64BDd
 public:

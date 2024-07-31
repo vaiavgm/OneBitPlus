@@ -1,6 +1,7 @@
 #include "VaiaOneBitPlus.h"
 #include "IPlug_include_in_plug_src.h"
 #include "LFO.h"
+#include <IPlugLogger.h>
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -18,7 +19,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamLFODepth)->InitPercentage("LFO Depth");
 
 #if IPLUG_EDITOR // http://bit.ly/2S64BDd
-  mMakeGraphicsFunc = [&]()
+  mMakeGraphicsFunc = [this]()
     {
       return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, GetScaleForScreen(PLUG_WIDTH, PLUG_HEIGHT));
     };
@@ -28,7 +29,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
 
 
-
+  using namespace igraphics;
 
 
   mLayoutFunc = [&](IGraphics* pGraphics)
@@ -48,7 +49,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
       pGraphics->AttachControl(new IVKeyboardControl(keyboardBounds), kCtrlTagKeyboard);
       pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5)), kCtrlTagBender);
       pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5, true), IMidiMsg::EControlChangeMsg::kModWheel));
-
+      //    pGraphics->AttachControl(new IVMultiSliderControl<4>(b.GetGridCell(0, 2, 2).GetPadded(-30), "", DEFAULT_STYLE, kParamEnvAttack1, EDirection::Vertical, 0.f, 1.f));
       const IRECT controls = b.GetFromLeft(400.f).GetReducedFromLeft(500.f).GetFromTop(150.f);
       pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(0, 2, 4).GetReducedFromLeft(50.f).GetCentredInside(90), kParamGain, "Gain"));
       pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(2, 2, 4).GetCentredInside(90), kParamNoteGlideTime, "Glide"));
@@ -59,7 +60,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
       pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamLFORateTempo, "Rate"), kNoTag, "LFO")->DisablePrompt(false);
       pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 1, 2, 3).GetCentredInside(60), kParamLFODepth, "Depth"), kNoTag, "LFO");
       pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 2, 2, 3).GetCentredInside(60), kParamLFOShape, "Shape"), kNoTag, "LFO")->DisablePrompt(false);
-      pGraphics->AttachControl(new IVSlideSwitchControl(lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20), kParamLFORateMode, "Sync", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false), false), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](IControl* pControl)
+      pGraphics->AttachControl(new IVSlideSwitchControl(lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20), kParamLFORateMode, "Sync", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false), false), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
         {
           bool sync = pControl->GetValue() > 0.5;
           pGraphics->HideControl(kParamLFORateHz, sync);
@@ -73,7 +74,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
       pGraphics->AttachControl(new IVButtonControl(keyboardBounds.GetFromTRHC(200, 30).GetTranslated(0, -60), SplashClickActionFunc,
         "Show/Hide Keyboard", DEFAULT_STYLE.WithColor(kFG, COLOR_WHITE).WithLabelText({ 15.f, EVAlign::Middle })))->SetAnimationEndActionFunction(
-          [pGraphics](IControl* pCaller)
+          [pGraphics]([[maybe_unused]] const IControl* pCaller)
           {
             static bool hide = false;
             pGraphics->GetControlWithTag(kCtrlTagKeyboard)->Hide(hide = !hide);
@@ -126,9 +127,7 @@ void VaiaOneBitPlus::ProcessMidiMsg(const IMidiMsg& msg)
 {
   TRACE;
 
-  int status = msg.StatusMsg();
-
-  switch (status)
+  switch (int status = msg.StatusMsg())
   {
   case IMidiMsg::kNoteOn:
   case IMidiMsg::kNoteOff:
@@ -156,7 +155,7 @@ void VaiaOneBitPlus::OnParamChange(int paramIdx)
 
 bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
 {
-  if (ctrlTag == kCtrlTagBender && msgTag == IWheelControl::kMessageTagSetPitchBendRange)
+  if (ctrlTag == kCtrlTagBender && msgTag == igraphics::IWheelControl::kMessageTagSetPitchBendRange)
   {
     const int bendRange = *static_cast<const int*>(pData);
     mDSP.mSynth.SetPitchBendRange(bendRange);
