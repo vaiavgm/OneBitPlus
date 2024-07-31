@@ -23,7 +23,6 @@ enum EParams
   kParamLFORateTempo,
   kParamLFORateMode,
   kParamLFODepth,
-  kNoParameter,
   kNumParams
 };
 
