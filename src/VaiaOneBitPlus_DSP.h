@@ -28,7 +28,9 @@ enum EModulations
 {
   kModGainSmoother = 0,
   kModSustainSmoother,
-  kModLFO,
+
+  kModPitchLFO1,
+  kModPwmLFO1,
   kNumModulations,
 };
 
@@ -50,12 +52,12 @@ public:
   {
 
   public:
-    Voice() : mAMPEnv("gain", [&]() { mOSC.Reset(); })
+    Voice() : mPWMEnv1("gain", [&]() { mOSC.Reset(); })
     {}
 
     bool GetBusy() const override
     {
-      return mAMPEnv.GetBusy();
+      return mPWMEnv1.GetBusy();
     }
 
     void Trigger(double level, bool isRetrigger) override
@@ -63,14 +65,14 @@ public:
       mOSC.Reset();
 
       if (isRetrigger)
-        mAMPEnv.Retrigger(level);
+        mPWMEnv1.Retrigger(level);
       else
-        mAMPEnv.Start(level);
+        mPWMEnv1.Start(level);
     }
 
     void Release() override
     {
-      mAMPEnv.Release();
+      mPWMEnv1.Release();
     }
 
 
@@ -86,13 +88,13 @@ public:
       mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
       // convert from "1v/oct" pitch space to frequency in Hertz
-      double osc1Freq = 440. * pow(2., pitch + pitchBend + inputs[kModLFO][0]);
+      double osc1Freq = 440. * pow(2., pitch + pitchBend + inputs[kModPitchLFO1][0]);
       // make sound output for each output channel
 
 
       for (auto i = startIdx; i < startIdx + nFrames; ++i)
       {
-        auto adsr_envelope = mAMPEnv.Process(inputs[kModSustainSmoother][i]);
+        auto adsr_envelope = mPWMEnv1.Process(inputs[kModSustainSmoother][i]);
 
         if (pitch < -5.74 && velocity > 1.0)
         {
@@ -131,43 +133,7 @@ public:
 
           switch (algo)
           {
-          case OSC_Algorithm::ALGO_FLIP_ONE:
 
-            oldOutput = outputs[0][i] > 0;
-            newOutput = base > 0;
-
-
-            if (oldOutput == 0.0f)
-            {
-              outputs[0][i] = outputs[1][i] = base;
-            }
-
-            if (newOutput == oldOutput)
-            {
-              outputs[0][i] = outputs[1][i] = newOutput * -1.0;
-            }
-            else
-            {
-              outputs[0][i] = outputs[1][i] = newOutput;
-            }
-
-            if (outputs[0][i] < 0.1 && outputs[0][i]> -0.1)
-            {
-              outputs[0][i] = outputs[1][i] = base;
-            }
-            break;
-          case OSC_Algorithm::ALGO_MOD_TWO:
-            if (base > 0)
-            {
-              temp += 0.1;
-            }
-            if (base < 0)
-            {
-              temp += 0.1;
-            }
-
-            outputs[0][i] = outputs[1][i] = temp;
-            break;
           case OSC_Algorithm::ALGO_PIN_PULSE:
 
             oldOutput = outputs[0][i] > 0.0f;
@@ -190,7 +156,7 @@ public:
     {
       mOSC.SetSampleRate(sampleRate);
 
-      mAMPEnv.SetSampleRate(sampleRate);
+      mPWMEnv1.SetSampleRate(sampleRate);
 
       mTimbreBuffer.Resize(blockSize);
     }
@@ -205,7 +171,8 @@ public:
     }
 
     VaiaOscillator<T> mOSC;
-    ADSREnvelope<T> mAMPEnv;
+    ADSREnvelope<T> mPWMEnv1;
+    ADSREnvelope<T> mPitchEnv1;
     OSC_Algorithm algo = used_algo;
     WDL_TypedBuf<float> mTimbreBuffer;
     double mModWheel{ 0.0 };
@@ -243,7 +210,8 @@ public:
     }
 
     mParamSmoother.ProcessBlock(mParamsToSmooth.data(), mModulations.GetList(), nFrames);
-    mLFO.ProcessBlock(mModulations.GetList()[kModLFO], nFrames, qnPos, transportIsRunning, tempo);
+    mPitchLFO1.ProcessBlock(mModulations.GetList()[kModPwmLFO1], nFrames, qnPos, transportIsRunning, tempo);
+    mEnvLFO1.ProcessBlock(mModulations.GetList()[kModPitchLFO1], nFrames, qnPos, transportIsRunning, tempo);
     mSynth.ProcessBlock(mModulations.GetList(), outputs, 0, nOutputs, nFrames);
 
     double eps = 0.001;
@@ -252,60 +220,6 @@ public:
     OSC_Algorithm algo2 = OSC_Algorithm::ALGO_MOD_TWO;
     switch (algo2)
     {
-    case OSC_Algorithm::ALGO_FLIP_ONE:
-
-      for (int s = 0; s < nFrames; s++)
-      {
-        T smoothedGain = mModulations.GetList()[kModGainSmoother][s];
-
-        if (abs(outputs[0][s]) < eps)
-        {
-          outputs[0][s] = outputs[1][s] = 0.0;
-        }
-        else if (outputs[0][s] < 0)
-        {
-          outputs[0][s] = -1.0 * smoothedGain;
-          outputs[1][s] = -1.0 * smoothedGain;
-        }
-        else if (outputs[0][s] > 0)
-        {
-          outputs[0][s] = 1.0 * smoothedGain;
-          outputs[1][s] = 1.0 * smoothedGain;
-        }
-
-      }
-      break;
-    case OSC_Algorithm::ALGO_MOD_TWO:
-
-      for (int s = 0; s < nFrames; s++)
-      {
-
-        auto check_modulo = (int)(abs(outputs[0][s])) % 2;
-
-
-        T smoothedGain = mModulations.GetList()[kModGainSmoother][s];
-        if (abs(outputs[0][s]) < eps)
-        {
-          outputs[0][s] = outputs[1][s] = 0.0;
-        }
-        else if (check_modulo == 1)
-        {
-
-          outputs[0][s] = 1.0 * smoothedGain;
-          outputs[1][s] = 1.0 * smoothedGain;
-        }
-        else if (check_modulo == 0)
-        {
-          outputs[0][s] = -1.0 * smoothedGain;
-          outputs[1][s] = -1.0 * smoothedGain;
-        }
-        else
-        {
-          outputs[0][s] = outputs[1][s] = 0.0;
-        }
-
-      }
-      break;
     case OSC_Algorithm::ALGO_PIN_PULSE:
       for (int s = 0; s < nFrames; s++)
       {
@@ -333,7 +247,7 @@ public:
   {
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
     mSynth.Reset();
-    mLFO.SetSampleRate(sampleRate);
+    mPitchLFO1.SetSampleRate(sampleRate);
     mModulationsData.Resize(blockSize * kNumModulations);
     mModulations.Empty();
 
@@ -370,24 +284,24 @@ public:
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamEnvAttack1));
       mSynth.ForEachVoice([stage, value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mAMPEnv.SetStageTime(stage, value);
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPWMEnv1.SetStageTime(stage, value);
         });
       break;
     }
-    case kParamLFODepth:
-      mLFO.SetScalar(value / 100.);
+    case kParamEnvLFODepth1:
+      mEnvLFO1.SetScalar(value / 100.);
       break;
-    case kParamLFORateTempo:
-      mLFO.SetQNScalarFromDivision(static_cast<int>(value));
+    case kParamEnvLFORateTempo1:
+      mEnvLFO1.SetQNScalarFromDivision(static_cast<int>(value));
       break;
-    case kParamLFORateHz:
-      mLFO.SetFreqCPS(value);
+    case kParamEnvLFORateHz1:
+      mEnvLFO1.SetFreqCPS(value);
       break;
-    case kParamLFORateMode:
-      mLFO.SetRateMode(value > 0.5);
+    case kParamEnvLFORateMode1:
+      mEnvLFO1.SetRateMode(value > 0.5);
       break;
-    case kParamLFOShape:
-      mLFO.SetShape(static_cast<int>(value));
+    case kParamEnvLFOShape1:
+      mEnvLFO1.SetShape(static_cast<int>(value));
       break;
     default:
       break;
@@ -403,5 +317,6 @@ public:
   WDL_PtrList<T> mModulations; // Ptrlist for global modulations
   LogParamSmooth<T, kNumModulations> mParamSmoother;
   std::array<sample, kNumModulations> mParamsToSmooth{};
-  LFO<T> mLFO;
+  LFO<T> mPitchLFO1;
+  LFO<T> mEnvLFO1; // TODO: rename to mPwmLFO1
 };
