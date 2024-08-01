@@ -36,7 +36,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamPitchLFORateTempo1)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
   GetParam(kParamPitchLFORateMode1)->InitBool("Pitch LFO Sync", true);
   GetParam(kParamPitchLFODepth1)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow1)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchModPow1)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
   GetParam(kParamPitchOffset1)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
   GetParam(kParamPitchKeyTrack1)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
 
@@ -63,7 +63,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamPitchLFORateTempo2)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
   GetParam(kParamPitchLFORateMode2)->InitBool("Pitch LFO Sync", true);
   GetParam(kParamPitchLFODepth2)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow2)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchModPow2)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
   GetParam(kParamPitchOffset2)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
   GetParam(kParamPitchKeyTrack2)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
 
@@ -90,7 +90,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamPitchLFORateTempo3)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
   GetParam(kParamPitchLFORateMode3)->InitBool("Pitch LFO Sync", true);
   GetParam(kParamPitchLFODepth3)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow3)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchModPow3)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
   GetParam(kParamPitchOffset3)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
   GetParam(kParamPitchKeyTrack3)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
 
@@ -117,7 +117,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamPitchLFORateTempo4)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
   GetParam(kParamPitchLFORateMode4)->InitBool("Pitch LFO Sync", true);
   GetParam(kParamPitchLFODepth4)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow4)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchModPow4)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
   GetParam(kParamPitchOffset4)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
   GetParam(kParamPitchKeyTrack4)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
 

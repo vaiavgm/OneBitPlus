@@ -154,12 +154,12 @@ public:
 
       // make sound output for each output channel
 
-      int oscId = velocity * all_oscs.size() / 128;
-      int envId = velocity * (all_envs.size() / 2) / 128; // there are 2 envs per osc
+      int oscId = velocity * osc_count / 128;
+      int envId = velocity * (env_count / 2) / 128; // there are 2 envs per osc
 
       VaiaOscillator<T>& mOSC = *all_oscs[oscId];
       ADSREnvelope<T>& mPwmEnv = *all_envs[envId];
-      ADSREnvelope<T>& mPitchEnv = *all_envs[envId + all_envs.size() / 2];
+      ADSREnvelope<T>& mPitchEnv = *all_envs[envId + env_count / 2];
 
       double pitchModStrength = pitchModStrengths[oscId];
       double pitchOffsetStrength = pitchOffsetStrengths[oscId];
@@ -235,28 +235,28 @@ public:
 
     void SetSampleRateAndBlockSize(double sampleRate, int blockSize) override
     {
-      for (auto osc : all_oscs)
-      {
-        osc->SetSampleRate(sampleRate);
-      }
-      //mOSC1.SetSampleRate(sampleRate);
-      //mOSC2.SetSampleRate(sampleRate);
-      //mOSC3.SetSampleRate(sampleRate);
-      //mOSC4.SetSampleRate(sampleRate);
+      //for (auto osc : all_oscs)
+      //{
+      //  osc->SetSampleRate(sampleRate);
+      //}
+      mOSC1.SetSampleRate(sampleRate);
+      mOSC2.SetSampleRate(sampleRate);
+      mOSC3.SetSampleRate(sampleRate);
+      mOSC4.SetSampleRate(sampleRate);
 
-      for (auto env : all_envs)
-      {
-        env->SetSampleRate(sampleRate);
-      }
-      //mPitchEnv1.SetSampleRate(sampleRate);
-      //mPitchEnv2.SetSampleRate(sampleRate);
-      //mPitchEnv3.SetSampleRate(sampleRate);
-      //mPitchEnv4.SetSampleRate(sampleRate);
-
-      // mPwmEnv1.SetSampleRate(sampleRate);
-      // mPwmEnv2.SetSampleRate(sampleRate);
-      // mPwmEnv3.SetSampleRate(sampleRate);
-      // mPwmEnv4.SetSampleRate(sampleRate);
+      //for (auto env : all_envs)
+      //{
+      //  env->SetSampleRate(sampleRate);
+      //}
+       mPitchEnv1.SetSampleRate(sampleRate);
+       mPitchEnv2.SetSampleRate(sampleRate);
+       mPitchEnv3.SetSampleRate(sampleRate);
+       mPitchEnv4.SetSampleRate(sampleRate);
+       
+        mPwmEnv1.SetSampleRate(sampleRate);
+        mPwmEnv2.SetSampleRate(sampleRate);
+        mPwmEnv3.SetSampleRate(sampleRate);
+        mPwmEnv4.SetSampleRate(sampleRate);
 
       mTimbreBuffer.Resize(blockSize);
     }
@@ -491,7 +491,7 @@ public:
     case kParamPwmKeyTrack1:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTrackStrengths[0] = value > 0.5;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value > 0.5;
         });
       break;
 
@@ -539,7 +539,7 @@ public:
     case kParamPitchKeyTrack1:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[0] = value;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value;
         });
       break;
 
@@ -588,7 +588,7 @@ public:
     case kParamPwmKeyTrack2:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTrackStrengths[1] = value > 0.5;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value > 0.5;
         });
       break;
 
@@ -636,7 +636,7 @@ public:
     case kParamPitchKeyTrack2:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[1] = value;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value;
         });
       break;
       // OSC 3
@@ -684,7 +684,7 @@ public:
     case kParamPwmKeyTrack3:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTrackStrengths[2] = value > 0.5;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[2] = value > 0.5;
         });
       break;
 
@@ -780,7 +780,7 @@ public:
     case kParamPwmKeyTrack4:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTrackStrengths[3] = value > 0.5;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[3] = value > 0.5;
         });
       break;
 
