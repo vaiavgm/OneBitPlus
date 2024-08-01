@@ -154,12 +154,12 @@ public:
 
       // make sound output for each output channel
 
-      int oscId = velocity * osc_count / 128;
-      int envId = velocity * (env_count / 2) / 128; // there are 2 envs per osc
+      int oscId = (velocity+1) * osc_count / 129;
+      int envId = oscId; // there are 2 envs per osc
 
-      VaiaOscillator<T>& mOSC = *all_oscs[oscId];
-      ADSREnvelope<T>& mPwmEnv = *all_envs[envId];
-      ADSREnvelope<T>& mPitchEnv = *all_envs[envId + env_count / 2];
+      VaiaOscillator<T>& mOSC = *(all_oscs.at(oscId));
+      ADSREnvelope<T>& mPwmEnv = *(all_envs.at(envId));
+      ADSREnvelope<T>& mPitchEnv = *(all_envs.at(envId + env_count / 2));
 
       double pitchModStrength = pitchModStrengths[oscId];
       double pitchOffsetStrength = pitchOffsetStrengths[oscId];
@@ -235,19 +235,12 @@ public:
 
     void SetSampleRateAndBlockSize(double sampleRate, int blockSize) override
     {
-      //for (auto osc : all_oscs)
-      //{
-      //  osc->SetSampleRate(sampleRate);
-      //}
+
       mOSC1.SetSampleRate(sampleRate);
       mOSC2.SetSampleRate(sampleRate);
       mOSC3.SetSampleRate(sampleRate);
       mOSC4.SetSampleRate(sampleRate);
 
-      //for (auto env : all_envs)
-      //{
-      //  env->SetSampleRate(sampleRate);
-      //}
        mPitchEnv1.SetSampleRate(sampleRate);
        mPitchEnv2.SetSampleRate(sampleRate);
        mPitchEnv3.SetSampleRate(sampleRate);

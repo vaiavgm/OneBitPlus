@@ -254,7 +254,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
 
 
-    float vert = 0.0;
+    float vert = 330.0;
     pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f+vert, 50.0, 125.0f+vert), "Type I", SMALL_TEXT));
 
     pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f+vert, 320.0, 120.0f+vert), "LFO", 10.0, SMALLER_LABEL));
@@ -306,7 +306,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     //////////////// OSC 2
 
-    vert += 110;
+    vert -= 110;
 
     pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type II", SMALL_TEXT));
 
@@ -359,7 +359,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     //////////////// OSC 3
 
-    vert += 110;
+    vert -= 110;
 
     pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type III", SMALL_TEXT));
 
@@ -413,7 +413,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     //////////////// OSC 4
 
-    vert += 110;
+    vert -= 110;
 
     pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type IV", SMALL_TEXT));
 
