@@ -1,4 +1,4 @@
-<REAPER_PROJECT 0.1 "7.19/win64" 1722468908
+<REAPER_PROJECT 0.1 "7.19/win64" 1722538512
   RIPPLE 0
   GROUPOVERRIDE 0 0 0
   AUTOXFADE 129
@@ -13,7 +13,7 @@
   GRID 3199 8 1 8 1 0 0 0
   TIMEMODE 1 5 -1 30 0 0 -1
   CURSOR 0
-  ZOOM 100.00000002458694 0 0
+  ZOOM 140.75532582780704 0 0
   VZOOMEX 5 0
   USE_REC_CFG 0
   RECMODE 1
@@ -73,14 +73,14 @@
   MASTER_FX 1
   MASTER_SEL 0
   <MASTERFXLIST
-    WNDRECT 64 938 1504 438
+    WNDRECT 54 323 2922 953
     SHOW 1
     LASTSEL 0
     DOCKED 0
     BYPASS 0 0 0
     <VST "VST3: PsyScope_Pro (FX23)" PsyScope_Pro.vst3 0 "" 233052870{ABCDEF019182FAEB4D616E75536C7A6B} ""
       xhrkDe5e7f4CAAAAAQAAAAAAAAACAAAAAAAAAAIAAAABAAAAAAAAAAIAAAAAAAAA3AIAAAEAAAD//xAA
-      zAIAAAEAAACou2oQAAAAALi7ahAAAAAAyLtqEAAAAADYu2oQAAAAAOi7ahAAAAAA+LtqEAAAAAAIvGoQAAAAABi8ahAAAAAARgQAAMADAADwAAAAAAAAAEi8ahAAAAAA
+      zAIAAAEAAACou2oQAAAAALi7ahAAAAAAyLtqEAAAAADYu2oQAAAAAOi7ahAAAAAA+LtqEAAAAAAIvGoQAAAAABi8ahAAAAAARgQAACwIAACMAgAAAAAAAEi8ahAAAAAA
       WLxqEAAAAABovGoQAAAAAHi8ahAAAAAAiLxqEAAAAACYvGoQAAAAAKi8ahAAAAAAuLxqEAAAAAAAAAAA4N0NPwEAahAAAAAAAgAAAAIAAAACAAAAAAAAAAAAAAABAAAA
       AQAAAAEAAAABAAAAAQAAAAEAAAABAAAARgQAAE1BU1RFUiAgICAgICAgICAAAAIBBAAAAAAAAAABAQAAAAAAAAAAAAAAQGBA16PAwAAAgD4AAEA/ADibcQMAAAAAABAA
       gAAAqgA4m3FhdWRzAAAQAIAAAKoAOJtxSQIAAAAAEACAAACqADibcWF1ZHMAABAAgAAAqgA4m3FAAgAAAAAQAIAAAKoAOJtxYXVkcwAAEACAAACqADibcUECAAAAABAA
@@ -145,15 +145,15 @@
     MIDIOUT -1
     MAINSEND 1 0
     <FXCHAIN
-      WNDRECT 1295 754 1929 1013
-      SHOW 0
+      WNDRECT 1950 1084 1932 1013
+      SHOW 1
       LASTSEL 0
       DOCKED 0
       BYPASS 0 0 0
       <VST "VST3i: OneBitPlus (Vaiaphraim)" VaiaOneBitPlus.vst3 0 "" 621843942{F2AEE70D00DE4F4E56616961564F4250} ""
         5pUQJe5e7f4AAAAAAgAAAAEAAAAAAAAAAgAAAAAAAAD0AAAAAQAAAP//EAA=
-        5AAAAAEAAAAAAAAAAABJQAAAAAAAAAAAJccEatf7VUAAAAAAAADwPwAAAAAAAFlAAAAAAAAAAEAAAAAAAAAAAAAAAAAAABBAfRSuR+F6hD8AAAAAAADwPwAAAAAAAAAA
-        AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        5AAAAAEAAAAAAAAAAABJQAAAAAAAAAAAAAAAAAAAAAAcr1UjQXppQAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwPwAAAAAAAAAAeXO0b08IGEAAAAAAAAAmQAAAAAAAAAAA
+        AAAAAAAAAAAAAAAAAADwP50ZdUvmTLU/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBAAAAAAAAAREAAAAAAAAAAAAAAAAAAAPA/
         AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==
         AAAQAAAA
       >
@@ -188,31 +188,31 @@
         E 0 90 3f 5f
         E 240 80 3f 00
         E 0 90 44 5f
-        e 21 90 02 32
-        e 63 80 02 00
+        E 21 90 02 32
+        E 63 80 02 00
         E 156 90 38 5f
-        e 21 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
         E 156 90 3f 5f
-        e 21 90 02 0e
-        e 63 80 02 00
-        e 177 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
+        E 177 90 02 0e
+        E 63 80 02 00
         E 156 90 46 5f
-        e 21 90 00 32
-        e 63 80 00 00
-        e 177 90 00 0e
-        e 63 80 00 00
+        E 21 90 00 32
+        E 63 80 00 00
+        E 177 90 00 0e
+        E 63 80 00 00
         E 396 90 47 5f
-        e 14 90 02 32
-        e 360 80 02 00
-        E 106 80 38 00
+        E 14 90 02 32
+        E 106 80 02 00
+        E 360 80 38 00
         E 240 80 44 00
         E 0 80 46 00
         E 0 90 44 5f
-        e 14 90 00 32
-        e 240 80 00 00
-        E 466 80 47 00
+        E 14 90 00 32
+        E 106 80 00 00
+        E 600 80 47 00
         E 240 80 3f 00
         E 0 80 44 00
         E 0 90 38 5f
@@ -220,31 +220,33 @@
         E 0 90 3f 5f
         E 240 80 3f 00
         E 0 90 44 5f
-        e 21 90 02 32
-        e 63 80 02 00
+        E 21 90 02 32
+        E 63 80 02 00
         E 156 90 38 5f
-        e 21 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
         E 156 90 3f 5f
-        e 21 90 02 0e
-        e 63 80 02 00
-        e 177 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
+        E 177 90 02 0e
+        E 63 80 02 00
         E 156 90 46 5f
-        e 21 90 00 32
-        e 63 80 00 00
-        e 177 90 00 0e
-        e 63 80 00 00
+        E 21 90 00 32
+        E 63 80 00 00
+        E 177 90 00 0e
+        E 63 80 00 00
         E 396 90 47 5f
-        e 14 90 02 32
-        e 360 80 02 00
-        E 106 80 38 00
-        E 240 80 44 00
+        E 14 90 02 32
+        E 106 80 02 00
+        E 360 80 38 00
+        E 0 90 02 0e
+        E 63 80 02 00
+        E 177 80 44 00
         E 0 80 46 00
         E 0 90 44 5f
-        e 14 90 00 32
-        e 240 80 00 00
-        E 466 80 47 00
+        E 14 90 00 32
+        E 106 80 00 00
+        E 600 80 47 00
         E 240 80 3f 00
         E 0 80 44 00
         E 0 90 2c 5f
@@ -252,37 +254,37 @@
         E 0 90 3f 5f
         E 240 80 3f 00
         E 0 90 38 5f
-        e 21 90 02 32
-        e 63 80 02 00
+        E 21 90 02 32
+        E 63 80 02 00
         E 156 90 2c 5f
-        e 21 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
         E 156 90 3d 5f
-        e 21 90 02 0e
-        e 63 80 02 00
-        e 177 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
+        E 177 90 02 0e
+        E 63 80 02 00
         E 156 90 44 5f
-        e 21 90 00 32
-        e 63 80 00 00
-        e 177 90 00 0e
-        e 63 80 00 00
+        E 21 90 00 32
+        E 63 80 00 00
+        E 177 90 00 0e
+        E 63 80 00 00
         E 396 90 42 5f
-        e 14 90 02 32
-        e 360 80 02 00
-        E 346 80 38 00
+        E 14 90 02 32
+        E 106 80 02 00
+        E 600 80 38 00
         E 0 80 44 00
         E 0 80 42 00
         E 0 90 38 5f
         E 0 90 44 5f
         E 0 90 49 5f
-        e 14 90 00 32
-        E 226 80 44 00
+        E 14 90 00 32
+        E 106 80 00 00
+        E 120 80 44 00
         E 0 80 49 00
         E 0 90 46 5f
         E 0 90 4b 5f
-        e 14 80 00 00
-        E 226 80 46 00
+        E 240 80 46 00
         E 0 80 4b 00
         E 0 90 47 5f
         E 0 90 4c 5f
@@ -300,37 +302,39 @@
         E 0 90 3f 5f
         E 240 80 3f 00
         E 0 90 38 5f
-        e 21 90 02 32
-        e 63 80 02 00
+        E 21 90 02 32
+        E 63 80 02 00
         E 156 90 2c 5f
-        e 21 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
         E 156 90 3d 5f
-        e 21 90 02 0e
-        e 63 80 02 00
-        e 177 90 02 0e
-        e 63 80 02 00
+        E 21 90 02 0e
+        E 63 80 02 00
+        E 177 90 02 0e
+        E 63 80 02 00
         E 156 90 46 5f
-        e 21 90 00 32
-        e 63 80 00 00
-        e 177 90 00 0e
-        e 63 80 00 00
+        E 21 90 00 32
+        E 63 80 00 00
+        E 177 90 00 0e
+        E 63 80 00 00
         E 396 90 47 5f
-        e 14 90 02 32
-        e 360 80 02 00
-        E 346 80 38 00
+        E 14 90 02 32
+        E 106 80 02 00
+        e 360 90 02 0e
+        e 63 80 02 00
+        E 177 80 38 00
         E 0 80 46 00
         E 0 80 47 00
         E 0 90 38 5f
         E 0 90 49 5f
         E 0 90 4e 5f
-        e 14 90 00 32
-        E 226 80 49 00
+        E 14 90 00 32
+        E 106 80 00 00
+        E 120 80 49 00
         E 0 80 4e 00
         E 0 90 47 60
         E 0 90 4c 60
-        e 14 80 00 00
-        E 226 80 47 00
+        E 240 80 47 00
         E 0 80 4c 00
         E 0 90 46 5f
         E 0 90 4b 5f
@@ -350,7 +354,7 @@
         IGNTEMPO 0 120 4 4
         SRCCOLOR 6
         VELLANE -1 228 0 0 1
-        CFGEDITVIEW 0 0.096121 41 12 0 -1 0 0 0 0.5
+        CFGEDITVIEW 5262.06053 0.128847 55 12 0 -1 0 0 0 0.5
         KEYSNAP 0
         TRACKSEL 252
         EVTFILTER 0 -1 -1 -1 -1 0 0 0 0 -1 -1 -1 -1 0 -1 0 -1 -1
@@ -358,21 +362,21 @@
       >
     >
     <ITEM
-      POSITION 9.23076923076923
+      POSITION 9.17307692307692
       SNAPOFFS 0
-      LENGTH 1.84615384615385
+      LENGTH 3.75
       LOOP 0
       ALLTAKES 0
       FADEIN 1 0 0 1 0 0 0
       FADEOUT 1 0 0 1 0 0 0
       MUTE 0 0
-      SEL 0
+      SEL 1
       IGUID {45F99119-9ED9-4F07-9EB0-3F67C33A1829}
       IID 7
       NAME 01-OneBitPlus-MIDI-glued
       VOLPAN 1 0 1 -1
-      SOFFS 2.76923076923077 6
-      PLAYRATE 1 1 0 -1 0 0.0025
+      SOFFS 2.74038461538461 5.9375
+      PLAYRATE 0.5 1 0 -1 0 0.0025
       CHANMODE 0
       GUID {633714A9-94B3-48A9-9E94-CE8BA16D9DBE}
       <SOURCE MIDI
@@ -427,9 +431,35 @@
         E 63 80 00 00
         E 177 90 00 0e
         E 63 80 00 00
-        E 156 90 40 60
-        E 5400 80 40 00
-        E 840 90 38 5f
+        E 156 90 3c 60
+        E 120 80 3c 00
+        E 0 90 48 60
+        E 120 80 48 00
+        E 0 90 30 60
+        E 120 80 30 00
+        E 0 90 0c 60
+        E 120 80 0c 00
+        e 300 90 2c 60
+        e 60 80 2c 00
+        e 60 90 2c 60
+        e 60 80 2c 00
+        e 60 90 2c 60
+        e 120 80 2c 00
+        e 0 90 2c 60
+        e 60 80 2c 00
+        e 60 90 2c 60
+        e 60 80 2c 00
+        e 60 90 2c 60
+        e 120 80 2c 00
+        e 0 90 20 60
+        e 120 80 20 00
+        e 60 90 20 60
+        e 120 80 20 00
+        e 60 90 20 60
+        e 120 80 20 00
+        e 60 90 31 60
+        e 180 80 31 00
+        E 4020 90 38 5f
         E 21 90 02 32
         E 63 80 02 00
         E 156 90 2c 5f
@@ -480,11 +510,11 @@
         IGNTEMPO 0 120 4 4
         SRCCOLOR 7
         VELLANE -1 228 0 0 1
-        CFGEDITVIEW -460.780891 0.096121 41 12 0 -1 0 0 0 0.5
+        CFGEDITVIEW -3910.373333 0.172715 55 12 0 -1 0 0 0 0.5
         KEYSNAP 0
         TRACKSEL 252
         EVTFILTER 0 -1 -1 -1 -1 0 0 0 0 -1 -1 -1 -1 0 -1 0 -1 -1
-        CFGEDIT 1 1 0 1 0 0 1 0 1 1 1 0.125 676 358 2771 1746 0 0 0 0 0 0 0 0 0 0.67 0 0 1 64
+        CFGEDIT 1 1 0 1 0 0 1 0 1 1 1 0.125 615 1007 2710 2395 0 0 0 0 0 0 0 0 0 0.67 0 0 1 64
       >
     >
   >

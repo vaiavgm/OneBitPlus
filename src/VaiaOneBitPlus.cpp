@@ -12,15 +12,116 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 {
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
-  GetParam(kParamEnvAttack1)->InitDouble("Attack", 150., 1., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamEnvDecay1)->InitDouble("Decay", 0., 1., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamEnvSustain1)->InitDouble("Sustain", 100., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamEnvRelease1)->InitDouble("Release", 0., 2., 1000., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamEnvLFOShape1)->InitEnum("LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
-  GetParam(kParamEnvLFORateHz1)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamEnvLFORateTempo1)->InitEnum("LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
-  GetParam(kParamEnvLFORateMode1)->InitBool("LFO Sync", true);
-  GetParam(kParamEnvLFODepth1)->InitPercentage("LFO Depth");
+
+  // OSC 1
+  GetParam(kParamPwmAttack1)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmDecay1)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmSustain1)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmRelease1)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmLFOShape1)->InitEnum("LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPwmLFORateHz1)->InitFrequency("LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPwmLFORateTempo1)->InitEnum("LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPwmLFORateMode1)->InitBool("LFO Sync", true);
+  GetParam(kParamPwmLFODepth1)->InitPercentage("LFO Depth");
+  GetParam(kParamPwmModPow1)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
+  GetParam(kParamPwmOffset1)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
+  GetParam(kParamPwmKeyTrack1)->InitBool("PWM Keytrack", false);
+
+  GetParam(kParamPitchAttack1)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchDecay1)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchSustain1)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchRelease1)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchLFOShape1)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPitchLFORateHz1)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPitchLFORateTempo1)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPitchLFORateMode1)->InitBool("Pitch LFO Sync", true);
+  GetParam(kParamPitchLFODepth1)->InitPercentage("Pitch LFO Depth");
+  GetParam(kParamPitchModPow1)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchOffset1)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
+  GetParam(kParamPitchKeyTrack1)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
+
+  // OSC 2
+  GetParam(kParamPwmAttack2)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmDecay2)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmSustain2)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmRelease2)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmLFOShape2)->InitEnum("LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPwmLFORateHz2)->InitFrequency("LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPwmLFORateTempo2)->InitEnum("LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPwmLFORateMode2)->InitBool("LFO Sync", true);
+  GetParam(kParamPwmLFODepth2)->InitPercentage("LFO Depth");
+  GetParam(kParamPwmModPow2)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
+  GetParam(kParamPwmOffset2)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
+  GetParam(kParamPwmKeyTrack2)->InitBool("PWM Keytrack", false);
+
+  GetParam(kParamPitchAttack2)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchDecay2)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchSustain2)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchRelease2)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchLFOShape2)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPitchLFORateHz2)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPitchLFORateTempo2)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPitchLFORateMode2)->InitBool("Pitch LFO Sync", true);
+  GetParam(kParamPitchLFODepth2)->InitPercentage("Pitch LFO Depth");
+  GetParam(kParamPitchModPow2)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchOffset2)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
+  GetParam(kParamPitchKeyTrack2)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
+
+  // OSC 3
+  GetParam(kParamPwmAttack3)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmDecay3)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmSustain3)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmRelease3)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmLFOShape3)->InitEnum("LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPwmLFORateHz3)->InitFrequency("LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPwmLFORateTempo3)->InitEnum("LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPwmLFORateMode3)->InitBool("LFO Sync", true);
+  GetParam(kParamPwmLFODepth3)->InitPercentage("LFO Depth");
+  GetParam(kParamPwmModPow3)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
+  GetParam(kParamPwmOffset3)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
+  GetParam(kParamPwmKeyTrack3)->InitBool("PWM Keytrack", false);
+
+  GetParam(kParamPitchAttack3)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchDecay3)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchSustain3)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchRelease3)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchLFOShape3)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPitchLFORateHz3)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPitchLFORateTempo3)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPitchLFORateMode3)->InitBool("Pitch LFO Sync", true);
+  GetParam(kParamPitchLFODepth3)->InitPercentage("Pitch LFO Depth");
+  GetParam(kParamPitchModPow3)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchOffset3)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
+  GetParam(kParamPitchKeyTrack3)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
+
+  // OSC 4
+  GetParam(kParamPwmAttack4)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmDecay4)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPwmSustain4)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmRelease4)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPwmLFOShape4)->InitEnum("LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPwmLFORateHz4)->InitFrequency("LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPwmLFORateTempo4)->InitEnum("LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPwmLFORateMode4)->InitBool("LFO Sync", true);
+  GetParam(kParamPwmLFODepth4)->InitPercentage("LFO Depth");
+  GetParam(kParamPwmModPow4)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
+  GetParam(kParamPwmOffset4)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
+  GetParam(kParamPwmKeyTrack4)->InitBool("PWM Keytrack", false);
+
+  GetParam(kParamPitchAttack4)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchDecay4)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+  GetParam(kParamPitchSustain4)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchRelease4)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+  GetParam(kParamPitchLFOShape4)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, { LFO_SHAPE_VALIST });
+  GetParam(kParamPitchLFORateHz4)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
+  GetParam(kParamPitchLFORateTempo4)->InitEnum("Pitch LFO Rate", LFO<>::k1, { LFO_TEMPODIV_VALIST });
+  GetParam(kParamPitchLFORateMode4)->InitBool("Pitch LFO Sync", true);
+  GetParam(kParamPitchLFODepth4)->InitPercentage("Pitch LFO Depth");
+  GetParam(kParamPitchModPow4)->InitDouble("Pitch Mod", 0, -4.0, 4.0, 0.05);
+  GetParam(kParamPitchOffset4)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
+  GetParam(kParamPitchKeyTrack4)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
+
+
 
   using namespace igraphics;
 
@@ -38,6 +139,12 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
   mLayoutFunc = [&](IGraphics* pGraphics)
   {
+      pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
+      pGraphics->AttachPanelBackground(COLOR_GRAY);
+      pGraphics->EnableMouseOver(true);
+      pGraphics->EnableMultiTouch(true);
+
+      pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
       const IVStyle DEFAULT_STYLE{
         true, // Show label
@@ -120,134 +227,300 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         0.0  // Angle
       };
 
+      const IText HEADER_TEXT{
+        20.0,
+        "Roboto-Regular"
+      };
 
-    pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
-    pGraphics->AttachPanelBackground(COLOR_GRAY);
-    pGraphics->EnableMouseOver(true);
-    pGraphics->EnableMultiTouch(true);
+      const IText SMALL_TEXT{
+        12.0,
+        "Roboto-Regular"
+      };
 
-    pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
-     
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0, 80.0, 120.0), kParamEnvAttack1, "A", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0, 110.0, 120.0), kParamEnvDecay1, "D", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0, 140.0, 120.0), kParamEnvSustain1, "S", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0, 170.0, 120.0), kParamEnvRelease1, "R", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 70.0, 25.0, 95.0), "1", LARGER_LABEL));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 175.0, 25.0, 200.0), "2", LARGER_LABEL));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 275.0, 25.0, 300.0), "3", LARGER_LABEL));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 375.0, 25.0, 400.0), "4", LARGER_LABEL));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 475.0, 25.0, 500.0), "5", LARGER_LABEL));
-    pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 575.0, 25.0, 600.0), "6", LARGER_LABEL));
 
-    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamEnvLFORateHz1, "Rate", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamEnvLFORateTempo1, "Rate", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);;
-    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0, 275.0, 115.0), kParamEnvLFODepth1, "Depth", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0, 310.0, 115.0), kParamEnvLFOShape1, "Shape", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);;
 
-    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0, 195.0, 90.0), kParamEnvLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+    //////////////////////////////
+    /// Insert GUI from Editor ///
+
+
+    //////////////// HEADER LABELS
+    pGraphics->AttachControl(new ITextControl(IRECT(170.0, 0.0f, 320.0, 20.0f), "PWM Control", HEADER_TEXT));
+    pGraphics->AttachControl(new ITextControl(IRECT(570.0, 0.0f, 720.0, 20.0f), "Pitch Control", HEADER_TEXT));
+    pGraphics->AttachControl(new ITextControl(IRECT(1070.0, 0.0f, 1220.0, 20.0f), "Extras", HEADER_TEXT));
+
+    //////////////// OSC 1
+
+
+
+
+    float vert = 0.0;
+    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f+vert, 50.0, 125.0f+vert), "Type I", SMALL_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f+vert, 320.0, 120.0f+vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f+vert, 500.0, 120.0f+vert), "Mods", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f+vert, 800.0, 120.0f+vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f+vert, 980.0, 120.0f+vert), "Mods", 10.0, SMALLER_LABEL));
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f+vert, 80.0, 120.0f+vert), kParamPwmAttack1, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f+vert, 110.0, 120.0f+vert), kParamPwmDecay1, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0f+vert, 140.0, 120.0f+vert), kParamPwmSustain1, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0f+vert, 170.0, 120.0f+vert), kParamPwmRelease1, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0f+vert, 195.0, 90.0f+vert), kParamPwmLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
       {
         bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamEnvLFORateHz1, sync);
-        pGraphics->HideControl(kParamEnvLFORateTempo1, !sync);
+        pGraphics->HideControl(kParamPwmLFORateHz1, sync);
+        pGraphics->HideControl(kParamPwmLFORateTempo1, !sync);
       });
-
-    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0, 320.0, 120.0), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0, 500.0, 120.0), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0, 800.0, 120.0), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0, 980.0, 120.0), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0, 80.0, 120.0), kParamEnvAttack1, "A", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0, 110.0, 120.0), kParamEnvDecay1, "D", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0, 140.0, 120.0), kParamEnvSustain1, "S", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0, 170.0, 120.0), kParamEnvRelease1, "R", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamEnvLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamEnvLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0, 275.0, 115.0), kParamEnvLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0, 310.0, 115.0), kParamEnvLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(335.0, 35.0, 380.0, 115.0), kParamEnvKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0, 435.0, 115.0), kParamEnvModWheel1, "Mod Wh.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0, 490.0, 115.0), kParamEnvOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0, 560.0, 120.0), kParamPitchAttack1, "A", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0, 590.0, 120.0), kParamPitchDecay1, "D", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0, 620.0, 120.0), kParamPitchSustain1, "S", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0, 650.0, 120.0), kParamPitchRelease1, "R", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0, 720.0, 115.0), kParamPitchLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0, 755.0, 115.0), kParamPitchLFORateDepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0, 790.0, 115.0), kParamPitchLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0, 720.0, 115.0), kParamPitchLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-    pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0, 860.0, 115.0), kParamPitchKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0, 915.0, 115.0), kParamPitchModWheel1, "Mod Wh.", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0, 970.0, 115.0), kParamPitchOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0, 1075.0, 85.0), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
-    pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0, 1130.0, 95.0), kParamExtraDetune1, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    // pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(655.0, 55.0, 675.0, 85.0), kParamPitchLFORateMode1, "", DEFAULT_STYLE, true, EDirection::Vertical, 2, 0));
-    };
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f+vert, 240.0, 115.0f+vert), kParamPwmLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f+vert, 240.0, 115.0f+vert), kParamPwmLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0f+vert, 275.0, 115.0f+vert), kParamPwmLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0f+vert, 310.0, 115.0f+vert), kParamPwmLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(340.0, 60.0f+vert, 360.0, 90.0f+vert), kParamPwmKeyTrack1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical)); pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0f+vert, 435.0, 115.0f+vert), kParamPwmModPow1, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0f+vert, 490.0, 115.0f+vert), kParamPwmOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
 
-  /*
-  mLayoutFunc = [&](IGraphics* pGraphics)
-    {
-      pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
-      pGraphics->AttachPanelBackground(COLOR_GRAY);
-      pGraphics->EnableMouseOver(true);
-      pGraphics->EnableMultiTouch(true);
 
-      pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
+    pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0f+vert, 560.0, 120.0f+vert), kParamPitchAttack1, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0f+vert, 590.0, 120.0f+vert), kParamPitchDecay1, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0f+vert, 620.0, 120.0f+vert), kParamPitchSustain1, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0f+vert, 650.0, 120.0f+vert), kParamPitchRelease1, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(655.0, 55.0f+vert, 675.0, 85.0f+vert), kParamPitchLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPitchLFORateHz1, sync);
+        pGraphics->HideControl(kParamPitchLFORateTempo1, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f+vert, 720.0, 115.0f+vert), kParamPitchLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f+vert, 720.0, 115.0f+vert), kParamPitchLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0f+vert, 755.0, 115.0f+vert), kParamPitchLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0f+vert, 790.0, 115.0f+vert), kParamPitchLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0f+vert, 860.0, 115.0f+vert), kParamPitchKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0f+vert, 915.0, 115.0f+vert), kParamPitchModPow1, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f+vert, 970.0, 115.0f+vert), kParamPitchOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
-      pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0, 320.0, 120.0), "LFO", 10.0, DEFAULT_STYLE));
-      pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0, 500.0, 120.0), "Mods", 10.0, DEFAULT_STYLE));
-      pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 25.0, 800.0, 125.0), "LFO", 10.0, DEFAULT_STYLE));
-      pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 25.0, 980.0, 125.0), "Mods", 10.0, DEFAULT_STYLE));
 
-      const IRECT b = pGraphics->GetBounds().GetPadded(-20.f);
-      const IRECT lfoPanel = b.GetFromLeft(150.f).GetFromTop(125.f);
-      const IRECT oscilloscopePanel = b.GetFromLeft(400.f).GetFromTop(125.f).GetReducedFromLeft(180.f).GetReducedFromRight(50.f).GetReducedFromTop(-10.f).GetReducedFromBottom(-10.f);
-      IRECT keyboardBounds = b.GetFromBottom(150);
-      IRECT wheelsBounds = keyboardBounds.ReduceFromLeft(100.f).GetPadded(-10.f);
-      pGraphics->AttachControl(new IVKeyboardControl(keyboardBounds), kCtrlTagKeyboard);
-      pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5)), kCtrlTagBender);
-      pGraphics->AttachControl(new IWheelControl(wheelsBounds.FracRectHorizontal(0.5, true), IMidiMsg::EControlChangeMsg::kModWheel));
-      pGraphics->AttachControl(new IVMultiSliderControl<4>(b.GetGridCell(0, 2, 2).GetPadded(-30), "", DEFAULT_STYLE, kParamEnvAttack1, 40, EDirection::Vertical));
-      const IRECT controls = b.GetFromLeft(400.f).GetReducedFromLeft(500.f).GetFromTop(150.f);
-      pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(0, 2, 4).GetReducedFromLeft(50.f).GetCentredInside(90), kParamGain, "Gain"));
-      pGraphics->AttachControl(new IVKnobControl(controls.GetGridCell(2, 2, 4).GetCentredInside(90), kParamNoteGlideTime, "Glide"));
-      
-      pGraphics->AttachControl(new IVLEDMeterControl<2>(controls.GetFromRight(35).GetPadded(-5)), kCtrlTagMeter);
-      
-      pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamEnvLFORateHz1, "Rate"), kNoTag, "LFO")->Hide(true);
-      pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 0, 2, 3).GetCentredInside(60), kParamEnvLFORateTempo1, "Rate"), kNoTag, "LFO")->DisablePrompt(false);
-      pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 1, 2, 3).GetCentredInside(60), kParamEnvLFODepth1, "Depth"), kNoTag, "LFO");
-      pGraphics->AttachControl(new IVKnobControl(lfoPanel.GetGridCell(0, 2, 2, 3).GetCentredInside(60), kParamEnvLFOShape1, "Shape"), kNoTag, "LFO")->DisablePrompt(false);
-      pGraphics->AttachControl(new IVSlideSwitchControl(lfoPanel.GetGridCell(1, 0, 2, 3).GetFromTop(30).GetMidHPadded(20), kParamEnvLFORateMode1, "Sync", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false).WithWidgetFrac(0.5f).WithDrawShadows(false), false), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
-         {
-           bool sync = pControl->GetValue() > 0.5;
-           pGraphics->HideControl(kParamEnvLFORateHz1, sync);
-           pGraphics->HideControl(kParamEnvLFORateTempo1, !sync);
-         });
-       pGraphics->AttachControl(new IVDisplayControl(oscilloscopePanel.GetGridCell(0, 0, 1, 1), "", DEFAULT_STYLE, EDirection::Horizontal, -1.f, 1.f, 0.f, 128), kCtrlTagOscilloscope, "Oscilloscope");
-       
-      pGraphics->AttachControl(new IVDisplayControl(lfoPanel.GetGridCell(1, 1, 2, 3).Union(lfoPanel.GetGridCell(1, 2, 2, 3)), "", DEFAULT_STYLE, EDirection::Horizontal, 0.f, 1.f, 0.f, 1024), kCtrlTagLFOVis, "LFO");
-       
-       pGraphics->AttachControl(new IVGroupControl("LFO", "LFO", 10.f, 20.f, 10.f, 10.f));
-      
-       pGraphics->AttachControl(new IVButtonControl(keyboardBounds.GetFromTRHC(200, 30).GetTranslated(0, -60), SplashClickActionFunc,
-         "Show/Hide Keyboard", DEFAULT_STYLE.WithColor(kFG, COLOR_WHITE).WithLabelText({ 15.f, EVAlign::Middle })))->SetAnimationEndActionFunction(
-           [pGraphics]([[maybe_unused]] const IControl* pCaller)
-           {
-             static bool hide = false;
-             pGraphics->GetControlWithTag(kCtrlTagKeyboard)->Hide(hide = !hide);
-             pGraphics->Resize(PLUG_WIDTH, hide ? PLUG_HEIGHT / 2 : PLUG_HEIGHT, pGraphics->GetDrawScale());
-           });
-       
-       pGraphics->SetQwertyMidiKeyHandlerFunc([pGraphics](const IMidiMsg& msg)
-         {
-           pGraphics->GetControlWithTag(kCtrlTagKeyboard)->As<IVKeyboardControl>()->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
-         });
-    };
- 
-  */
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f+vert, 1075.0, 85.0f+vert), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f+vert, 1130.0, 95.0f+vert), kParamExtraDetune1, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+    //////////////// OSC 2
+
+    vert += 110;
+
+    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type II", SMALL_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack2, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay2, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain2, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease2, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPwmLFORateHz2, sync);
+        pGraphics->HideControl(kParamPwmLFORateTempo2, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth2, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape2, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical)); pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0f+vert, 435.0, 115.0f+vert), kParamPwmModPow2, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset2, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack2, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay2, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain2, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease2, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPitchLFORateHz2, sync);
+        pGraphics->HideControl(kParamPitchLFORateTempo2, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth2, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape2, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack2, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow2, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset2, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison2, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune2, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+    //////////////// OSC 3
+
+    vert += 110;
+
+    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type III", SMALL_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack3, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay3, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain3, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease3, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPwmLFORateHz3, sync);
+        pGraphics->HideControl(kParamPwmLFORateTempo3, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth3, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape3, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical)); pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow3, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset3, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack3, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay3, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain3, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease3, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPitchLFORateHz3, sync);
+        pGraphics->HideControl(kParamPitchLFORateTempo3, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth3, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape3, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack3, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow3, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset3, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison3, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune3, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+    //////////////// OSC 4
+
+    vert += 110;
+
+    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type IV", SMALL_TEXT));
+
+    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack4, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay4, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain4, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease4, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPwmLFORateHz4, sync);
+        pGraphics->HideControl(kParamPwmLFORateTempo4, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth4, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape4, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical)); pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow4, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset4, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+
+
+    pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack4, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay4, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain4, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease4, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+      {
+        bool sync = pControl->GetValue() > 0.5;
+        pGraphics->HideControl(kParamPitchLFORateHz4, sync);
+        pGraphics->HideControl(kParamPitchLFORateTempo4, !sync);
+      });
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth4, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape4, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);
+    pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack4, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow4, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset4, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison4, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune4, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+
+  };
+
+    /// End of Insert ////////////
+    //////////////////////////////
+     
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0, 80.0, 120.0), kParamPwmAttack1, "A", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0, 110.0, 120.0), kParamPwmDecay1, "D", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0, 140.0, 120.0), kParamPwmSustain1, "S", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0, 170.0, 120.0), kParamPwmRelease1, "R", DEFAULT_STYLE, false, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 70.0, 25.0, 95.0), "1", LARGER_LABEL));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 175.0, 25.0, 200.0), "2", LARGER_LABEL));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 275.0, 25.0, 300.0), "3", LARGER_LABEL));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 375.0, 25.0, 400.0), "4", LARGER_LABEL));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 475.0, 25.0, 500.0), "5", LARGER_LABEL));
+    // pGraphics->AttachControl(new IVLabelControl(IRECT(0.0, 575.0, 25.0, 600.0), "6", LARGER_LABEL));
+    // 
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamPwmLFORateHz1, "Rate", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->Hide(true);
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamPwmLFORateTempo1, "Rate", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);;
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0, 275.0, 115.0), kParamPwmLFODepth1, "Depth", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0, 310.0, 115.0), kParamPwmLFOShape1, "Shape", SMALLER_LABEL, false, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))->DisablePrompt(false);;
+    // 
+    // pGraphics->AttachControl(new IVSlideSwitchControl(IRECT(175.0, 60.0, 195.0, 90.0), kParamPwmLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical), kNoTag, "LFO")->SetAnimationEndActionFunction([pGraphics](const IControl* pControl)
+    //   {
+    //     bool sync = pControl->GetValue() > 0.5;
+    //     pGraphics->HideControl(kParamPwmLFORateHz1, sync);
+    //     pGraphics->HideControl(kParamPwmLFORateTempo1, !sync);
+    //   });
+    // 
+    // pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0, 320.0, 120.0), "LFO", 10.0, SMALLER_LABEL));
+    // pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0, 500.0, 120.0), "Mods", 10.0, SMALLER_LABEL));
+    // pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0, 800.0, 120.0), "LFO", 10.0, SMALLER_LABEL));
+    // pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0, 980.0, 120.0), "Mods", 10.0, SMALLER_LABEL));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0, 80.0, 120.0), kParamPwmAttack1, "A", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0, 110.0, 120.0), kParamPwmDecay1, "D", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(100.0, 35.0, 140.0, 120.0), kParamPwmSustain1, "S", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(130.0, 35.0, 170.0, 120.0), kParamPwmRelease1, "R", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamPwmLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(205.0, 35.0, 240.0, 115.0), kParamPwmLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(240.0, 35.0, 275.0, 115.0), kParamPwmLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(275.0, 35.0, 310.0, 115.0), kParamPwmLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(335.0, 35.0, 380.0, 115.0), kParamPwmKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(390.0, 35.0, 435.0, 115.0), kParamPwmModPow1, "Mod Wh.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(445.0, 35.0, 490.0, 115.0), kParamPwmOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(520.0, 35.0, 560.0, 120.0), kParamPitchAttack1, "A", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(550.0, 35.0, 590.0, 120.0), kParamPitchDecay1, "D", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(580.0, 35.0, 620.0, 120.0), kParamPitchSustain1, "S", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVSliderControl(IRECT(610.0, 35.0, 650.0, 120.0), kParamPitchRelease1, "R", DEFAULT_STYLE, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0, 720.0, 115.0), kParamPitchLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(720.0, 35.0, 755.0, 115.0), kParamPitchLFORateDepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(755.0, 35.0, 790.0, 115.0), kParamPitchLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(685.0, 35.0, 720.0, 115.0), kParamPitchLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // 
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(815.0, 35.0, 860.0, 115.0), kParamPitchKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(870.0, 35.0, 915.0, 115.0), kParamPitchModPow1, "Mod Wh.", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0, 970.0, 115.0), kParamPitchOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    // pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0, 1075.0, 85.0), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, 1.0, 1.0, 8.0, "%0.0f"));
+    // pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0, 1130.0, 95.0), kParamExtraDetune1, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
 #endif
@@ -259,20 +532,11 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
   mDSP.ProcessBlock(nullptr, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
-  // mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
-
-  // mLFOVisSender.PushData({ kCtrlTagLFOVis, {float(mDSP.mPitchLFO1.GetLastOutput())} });
-  // for (int i = 0; i < nFrames; ++i)
-  // {
-  //   mOscilloscopeVisSender.PushData({ kCtrlTagOscilloscope, {float(outputs[0][i])} });
-  // }
 }
 
 void VaiaOneBitPlus::OnIdle()
 {
-  // mMeterSender.TransmitData(*this);
-  // mLFOVisSender.TransmitData(*this);
-  // mOscilloscopeVisSender.TransmitData(*this);
+
 }
 
 void VaiaOneBitPlus::OnReset()
