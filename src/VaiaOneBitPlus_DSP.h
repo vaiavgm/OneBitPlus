@@ -100,13 +100,9 @@ public:
 
     void Trigger(double level, bool isRetrigger) override
     {
-      //mOSC1.Reset();
       for (auto &o : mUnisonOsc1) o.Reset();
-      //mOSC2.Reset();
       for (auto &o : mUnisonOsc2) o.Reset();
-      //mOSC3.Reset();
       for (auto &o : mUnisonOsc3) o.Reset();
-      //mOSC4.Reset();
       for (auto &o : mUnisonOsc4) o.Reset();
 
 
@@ -265,13 +261,9 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
     void SetSampleRateAndBlockSize(double sampleRate, int blockSize) override
     {
 
-      //mOSC1.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc1) o.SetSampleRate(sampleRate);
-     // mOSC2.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc2) o.SetSampleRate(sampleRate);
-     // mOSC3.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc3) o.SetSampleRate(sampleRate);
-     // mOSC4.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc4) o.SetSampleRate(sampleRate);
 
        mPitchEnv1.SetSampleRate(sampleRate);
@@ -297,25 +289,21 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
     }
 
     // Type 1
-    //VaiaOscillator<T> mOSC1{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc1{};
     ADSREnvelope<T> mPwmEnv1{};
     ADSREnvelope<T> mPitchEnv1{};
 
     // Type 2
-    //VaiaOscillator<T> mOSC2{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc2{};
     ADSREnvelope<T> mPwmEnv2{};
     ADSREnvelope<T> mPitchEnv2{};
 
     // Type 3
-    //VaiaOscillator<T> mOSC3{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc3{};
     ADSREnvelope<T> mPwmEnv3{};
     ADSREnvelope<T> mPitchEnv3{};
 
     // Type 4
-    //VaiaOscillator<T> mOSC4{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc4{};
     ADSREnvelope<T> mPwmEnv4{};
     ADSREnvelope<T> mPitchEnv4{};
