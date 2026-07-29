@@ -145,6 +145,9 @@
     <ClCompile Include="..\src\VaiaOscillator.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\WDL\win32_utf8.c">
+      <Filter>WDL</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\resources\resource.h">
@@ -454,6 +457,9 @@
     </Filter>
     <Filter Include="resources">
       <UniqueIdentifier>{74cd52f2-b3b1-45bf-b24a-5e60e66b70de}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="WDL">
+      <UniqueIdentifier>{a5ad8cf3-62c4-4e9f-b5b9-1df3bfa0b546}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

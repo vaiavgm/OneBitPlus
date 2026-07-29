@@ -73,11 +73,14 @@ public:
   {
 
   public:
-    Voice() : mPwmEnv1("gain", [&]() { mOSC1.Reset(); }), mPitchEnv1("gain", [&]() { mOSC1.Reset(); }),
-      mPwmEnv2("gain", [&]() { mOSC2.Reset(); }), mPitchEnv2("gain", [&]() { mOSC2.Reset(); }),
-      mPwmEnv3("gain", [&]() { mOSC3.Reset(); }), mPitchEnv3("gain", [&]() { mOSC3.Reset(); }),
-      mPwmEnv4("gain", [&]() { mOSC4.Reset(); }), mPitchEnv4("gain", [&]() { mOSC4.Reset(); })
-    {}
+    Voice() : mPwmEnv1("gain", [&]() { mOSC1.Reset(); for (auto &o : mUnisonOsc1) o.Reset(); }), mPitchEnv1("gain", [&]() { mOSC1.Reset(); for (auto &o : mUnisonOsc1) o.Reset(); }),
+      mPwmEnv2("gain", [&]() { mOSC2.Reset(); for (auto &o : mUnisonOsc2) o.Reset(); }), mPitchEnv2("gain", [&]() { mOSC2.Reset(); for (auto &o : mUnisonOsc2) o.Reset(); }),
+      mPwmEnv3("gain", [&]() { mOSC3.Reset(); for (auto &o : mUnisonOsc3) o.Reset(); }), mPitchEnv3("gain", [&]() { mOSC3.Reset(); for (auto &o : mUnisonOsc3) o.Reset(); }),
+      mPwmEnv4("gain", [&]() { mOSC4.Reset(); for (auto &o : mUnisonOsc4) o.Reset(); }), mPitchEnv4("gain", [&]() { mOSC4.Reset(); for (auto &o : mUnisonOsc4) o.Reset(); })
+    {
+      for (auto &c : extraUnisonCounts) c = 1;
+      for (auto &d : extraDetuneCents) d = 0.0;
+    }
 
     bool GetBusy() const override
     {
@@ -98,9 +101,13 @@ public:
     void Trigger(double level, bool isRetrigger) override
     {
       mOSC1.Reset();
+      for (auto &o : mUnisonOsc1) o.Reset();
       mOSC2.Reset();
+      for (auto &o : mUnisonOsc2) o.Reset();
       mOSC3.Reset();
+      for (auto &o : mUnisonOsc3) o.Reset();
       mOSC4.Reset();
+      for (auto &o : mUnisonOsc4) o.Reset();
 
 
       if (isRetrigger)
@@ -207,8 +214,43 @@ public:
         }
         else
         {
-          mOSC.SetPWM(pwmFunc);
-          auto base = mOSC.Process(osc1Freq);
+
+          int unison = extraUnisonCounts[oscId] > 0 ? extraUnisonCounts[oscId] : 1;
+
+          double base = 0.0;
+
+          if (unison <= 1)
+          {
+            mOSC.SetPWM(pwmFunc);
+            base = mOSC.Process(osc1Freq);
+          }
+          else
+          {
+            // pick correct unison array
+            std::array<VaiaOscillator<T>, 8>* arr = nullptr;
+            switch (oscId)
+            {
+            case 0: arr = &mUnisonOsc1; break;
+            case 1: arr = &mUnisonOsc2; break;
+            case 2: arr = &mUnisonOsc3; break;
+            default: arr = &mUnisonOsc4; break;
+            }
+
+            double detuneRange = extraDetuneCents[oscId]; // in cents
+            bool anyHigh = false;
+
+            for (int u = 0; u < unison; ++u)
+            {
+              double offsetCents = (unison == 1) ? 0.0 : (-detuneRange / 2.0 + (detuneRange * (double)u) / (double)(unison - 1));
+              double freq = osc1Freq * pow(2.0, offsetCents / 1200.0);
+              auto& uosc = (*arr)[u];
+              uosc.SetPWM(pwmFunc);
+              double out = uosc.Process(freq);
+              if (out > 0.0) anyHigh = true;
+            }
+
+            base = anyHigh ? 1.0 : -1.0;
+          }
 
           bool oldOutput, newOutput;
           double temp = outputs[0][i] + base;
@@ -237,9 +279,13 @@ public:
     {
 
       mOSC1.SetSampleRate(sampleRate);
+      for (auto &o : mUnisonOsc1) o.SetSampleRate(sampleRate);
       mOSC2.SetSampleRate(sampleRate);
+      for (auto &o : mUnisonOsc2) o.SetSampleRate(sampleRate);
       mOSC3.SetSampleRate(sampleRate);
+      for (auto &o : mUnisonOsc3) o.SetSampleRate(sampleRate);
       mOSC4.SetSampleRate(sampleRate);
+      for (auto &o : mUnisonOsc4) o.SetSampleRate(sampleRate);
 
        mPitchEnv1.SetSampleRate(sampleRate);
        mPitchEnv2.SetSampleRate(sampleRate);
@@ -265,21 +311,25 @@ public:
 
     // Type 1
     VaiaOscillator<T> mOSC1{};
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc1{};
     ADSREnvelope<T> mPwmEnv1{};
     ADSREnvelope<T> mPitchEnv1{};
 
     // Type 2
     VaiaOscillator<T> mOSC2{};
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc2{};
     ADSREnvelope<T> mPwmEnv2{};
     ADSREnvelope<T> mPitchEnv2{};
 
     // Type 3
     VaiaOscillator<T> mOSC3{};
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc3{};
     ADSREnvelope<T> mPwmEnv3{};
     ADSREnvelope<T> mPitchEnv3{};
 
     // Type 4
     VaiaOscillator<T> mOSC4{};
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc4{};
     ADSREnvelope<T> mPwmEnv4{};
     ADSREnvelope<T> mPitchEnv4{};
 
@@ -295,6 +345,10 @@ public:
     std::array<double, osc_count> pitchKeyTrackStrengths{};
     std::array<double, osc_count> pitchModStrengths{};
     std::array<double, osc_count> pitchOffsetStrengths{};
+
+    // Unison controls per-voice (1..8) and detune in cents (0..100)
+    std::array<int, osc_count> extraUnisonCounts{};
+    std::array<double, osc_count> extraDetuneCents{};
 
 
     OSC_Algorithm algo = used_algo;
@@ -345,23 +399,23 @@ public:
     mParamSmoother.ProcessBlock(mParamsToSmooth.data(), mModulations.GetList(), nFrames);
     mPitchLFO1.ProcessBlock(mModulations.GetList()[kModPitchLFO1], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO1.ProcessBlock(mModulations.GetList()[kModPwmLFO1], nFrames, qnPos, transportIsRunning, tempo);
-    CentralizeLFO(mModulations.GetList()[kModPitchLFO1], nFrames, mPitchLFO1.GetScalar());
-    CentralizeLFO(mModulations.GetList()[kModPwmLFO1], nFrames, mPwmLFO1.GetScalar());
+    CentralizeLFO(mModulations.GetList()[kModPitchLFO1], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
+    CentralizeLFO(mModulations.GetList()[kModPwmLFO1], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
 
     mPitchLFO2.ProcessBlock(mModulations.GetList()[kModPitchLFO2], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO2.ProcessBlock(mModulations.GetList()[kModPwmLFO2], nFrames, qnPos, transportIsRunning, tempo);
-    CentralizeLFO(mModulations.GetList()[kModPitchLFO2], nFrames, mPitchLFO2.GetScalar());
-    CentralizeLFO(mModulations.GetList()[kModPwmLFO2], nFrames, mPwmLFO2.GetScalar());
+    CentralizeLFO(mModulations.GetList()[kModPitchLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
+    CentralizeLFO(mModulations.GetList()[kModPwmLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
    
     mPitchLFO3.ProcessBlock(mModulations.GetList()[kModPitchLFO3], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO3.ProcessBlock(mModulations.GetList()[kModPwmLFO3], nFrames, qnPos, transportIsRunning, tempo);
-    CentralizeLFO(mModulations.GetList()[kModPitchLFO3], nFrames, mPitchLFO3.GetScalar());
-    CentralizeLFO(mModulations.GetList()[kModPwmLFO3], nFrames, mPwmLFO3.GetScalar());
+    CentralizeLFO(mModulations.GetList()[kModPitchLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
+    CentralizeLFO(mModulations.GetList()[kModPwmLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
    
     mPitchLFO4.ProcessBlock(mModulations.GetList()[kModPitchLFO4], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO4.ProcessBlock(mModulations.GetList()[kModPwmLFO4], nFrames, qnPos, transportIsRunning, tempo);
-    CentralizeLFO(mModulations.GetList()[kModPitchLFO4], nFrames, mPitchLFO4.GetScalar());
-    CentralizeLFO(mModulations.GetList()[kModPwmLFO4], nFrames, mPwmLFO4.GetScalar());
+    CentralizeLFO(mModulations.GetList()[kModPitchLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
+    CentralizeLFO(mModulations.GetList()[kModPwmLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
 
     mSynth.ProcessBlock(mModulations.GetList(), outputs, 0, nOutputs, nFrames);
 
@@ -822,6 +876,78 @@ public:
       mSynth.ForEachVoice([value](SynthVoice& voice)
         {
           dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[3] = value;
+        });
+      break;
+    case kParamExtraUnison1:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          int v = static_cast<int>(value);
+          if (v < 1) v = 1;
+          if (v > 8) v = 8;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[0] = v;
+        });
+      break;
+    case kParamExtraDetune1:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          double v = value;
+          if (v < 0.0) v = 0.0;
+          if (v > 100.0) v = 100.0;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[0] = v;
+        });
+      break;
+    case kParamExtraUnison2:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          int v = static_cast<int>(value);
+          if (v < 1) v = 1;
+          if (v > 8) v = 8;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[1] = v;
+        });
+      break;
+    case kParamExtraDetune2:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          double v = value;
+          if (v < 0.0) v = 0.0;
+          if (v > 100.0) v = 100.0;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[1] = v;
+        });
+      break;
+    case kParamExtraUnison3:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          int v = static_cast<int>(value);
+          if (v < 1) v = 1;
+          if (v > 8) v = 8;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[2] = v;
+        });
+      break;
+    case kParamExtraDetune3:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          double v = value;
+          if (v < 0.0) v = 0.0;
+          if (v > 100.0) v = 100.0;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[2] = v;
+        });
+      break;
+    case kParamExtraUnison4:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          int v = static_cast<int>(value);
+          if (v < 1) v = 1;
+          if (v > 8) v = 8;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[3] = v;
+        });
+      break;
+    case kParamExtraDetune4:
+      mSynth.ForEachVoice([value](SynthVoice& voice)
+        {
+          double v = value;
+          if (v < 0.0) v = 0.0;
+          if (v > 100.0) v = 100.0;
+          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[3] = v;
         });
       break;
       // DEFAULT

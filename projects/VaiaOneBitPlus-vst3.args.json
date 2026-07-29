@@ -1,0 +1,42 @@
+{
+  "FileVersion": 2,
+  "Id": "079fc65a-f0e5-4e97-b318-a16d1d0b89df",
+  "Items": [
+    {
+      "Id": "1117a5be-1062-4fb2-8c13-99bc4a16ae69",
+      "Command": "Tracer|x64",
+      "ProjectConfig": "Tracer",
+      "ProjectPlatform": "x64",
+      "Items": [
+        {
+          "Id": "8ddc62b5-fbd9-4ccd-827a-1db6e22099b7",
+          "Command": "WindowsLocalDebugger",
+          "Items": [
+            {
+              "Id": "38ee1fea-fa95-4c4b-a11c-ab2b072d6977",
+              "Command": "$(VST3_64_COMMAND_ARGS)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Id": "b85e6060-3cc2-4d8b-bbd3-9765446ac48e",
+      "Command": "Release|x64",
+      "ProjectConfig": "Release",
+      "ProjectPlatform": "x64",
+      "Items": [
+        {
+          "Id": "6a1f2435-ea8c-4740-96ad-844d25e84762",
+          "Command": "WindowsLocalDebugger",
+          "Items": [
+            {
+              "Id": "6fc7d3f1-6e26-40a0-8f1d-508318063b42",
+              "Command": "$(VST3_64_COMMAND_ARGS)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

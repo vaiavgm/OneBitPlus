@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="..\VaiaOneBitPlus.cpp" />
     <ClCompile Include="..\..\..\IPlug\IPlugAPIBase.cpp">
       <Filter>IPlug</Filter>
     </ClCompile>
@@ -56,10 +55,14 @@
     <ClCompile Include="..\..\..\IGraphics\Drawing\IGraphicsSkia.cpp">
       <Filter>IGraphics\Drawing</Filter>
     </ClCompile>
+    <ClCompile Include="..\VaiaOneBitPlus.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\VaiaOscillator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="../config.h" />
-    <ClInclude Include="..\VaiaOneBitPlus.h" />
     <ClInclude Include="..\..\..\IPlug\IPlugAPIBase.h">
       <Filter>IPlug</Filter>
     </ClInclude>
@@ -207,7 +210,18 @@
     <ClInclude Include="..\..\..\IGraphics\Drawing\IGraphicsSkia.h">
       <Filter>IGraphics\Drawing</Filter>
     </ClInclude>
-    <ClInclude Include="..\VaiaOneBitPlus_DSP.h" />
+    <ClInclude Include="../config.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\VaiaOneBitPlus.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\VaiaOneBitPlus_DSP.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\VaiaOscillator.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IPlug">
@@ -239,6 +253,9 @@
     </Filter>
     <Filter Include="IPlug\Extras\Synth">
       <UniqueIdentifier>{fdcb57cf-5e85-4d3f-9eb5-22a60fac3679}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{9b8eb586-e27b-46a0-8bd1-e21587e97ca3}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
