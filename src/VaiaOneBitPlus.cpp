@@ -13,6 +13,9 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
+  GetParam(kInputDither)->InitPercentage("Input Dither", 0., 0., 100.);
+  GetParam(kInputProtect)->InitPercentage("Input Protection", 0., 0., 100.);
+
   // OSC 1
   GetParam(kParamPwmAttack1)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
   GetParam(kParamPwmDecay1)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
@@ -257,6 +260,12 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new ITextControl(IRECT(170.0, 0.0f, 320.0, 20.0f), "PWM Control", HEADER_TEXT));
     pGraphics->AttachControl(new ITextControl(IRECT(570.0, 0.0f, 720.0, 20.0f), "Pitch Control", HEADER_TEXT));
     pGraphics->AttachControl(new ITextControl(IRECT(1070.0, 0.0f, 1220.0, 20.0f), "Extras", HEADER_TEXT));
+
+
+
+   pGraphics->AttachControl(new IVSliderControl(IRECT(00.0, 35.0f + 440, 80.0, 120.0f + 440), kInputDither, "Dither", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+    pGraphics->AttachControl(
+      new IVSlideSwitchControl(IRECT(340.0, 60.0f + 440, 360.0, 90.0f + 440), kInputProtect, "Input Protection", DEFAULT_STYLE.WithShowLabel(false), true, EDirection::Vertical));
 
     //////////////// OSC 1
 

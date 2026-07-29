@@ -1,23 +1,28 @@
 #pragma once
 
-#define MY_PRINTF(...) {char buf[512]; sprintf(buf, __VA_ARGS__);  OutputDebugString(buf);}
+#define MY_PRINTF(...)                                                                                                                                                                                 \
+  {                                                                                                                                                                                                    \
+    char buf[512];                                                                                                                                                                                     \
+    sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
+    OutputDebugString(buf);                                                                                                                                                                            \
+  }
 
 #include <IPlugLogger.h>
 #include <IPlugMidi.h>
 
+#include <IPlugConstants.h>
+#include <SynthVoice.h>
+#include <VoiceAllocator.h>
+#include <array>
 #include <heapbuf.h>
 #include <ptrlist.h>
 #include <stdlib.h>
-#include <array>
-#include <SynthVoice.h>
-#include <VoiceAllocator.h>
-#include <IPlugConstants.h>
 
 
-#include <MidiSynth.h>
 #include <ADSREnvelope.h>
-#include <Smoothers.h>
 #include <LFO.h>
+#include <MidiSynth.h>
+#include <Smoothers.h>
 #include <cstdint>
 
 #include "VaiaOneBitPlus.h"
@@ -57,14 +62,14 @@ enum EModulations
 
 enum class OSC_Algorithm
 {
-  ALGO_FLIP_ONE, //This one is not quite correct, as it outputs some zeroes where it shouldn't
+  ALGO_FLIP_ONE, // This one is not quite correct, as it outputs some zeroes where it shouldn't
   ALGO_MOD_TWO,
   ALGO_PIN_PULSE, // just add and clamp
 };
 
 const OSC_Algorithm used_algo = OSC_Algorithm::ALGO_PIN_PULSE;
 
-template<typename T>
+template <typename T>
 class OneBitPlusDSP
 {
 public:
@@ -73,13 +78,51 @@ public:
   {
 
   public:
-    Voice() : mPwmEnv1("gain", [&]() {  for (auto &o : mUnisonOsc1) o.Reset(); }), mPitchEnv1("gain", [&]() { for (auto &o : mUnisonOsc1) o.Reset(); }),
-      mPwmEnv2("gain", [&]() {  for (auto &o : mUnisonOsc2) o.Reset(); }), mPitchEnv2("gain", [&]() {  for (auto &o : mUnisonOsc2) o.Reset(); }),
-      mPwmEnv3("gain", [&]() {  for (auto &o : mUnisonOsc3) o.Reset(); }), mPitchEnv3("gain", [&]() {  for (auto &o : mUnisonOsc3) o.Reset(); }),
-      mPwmEnv4("gain", [&]() {  for (auto &o : mUnisonOsc4) o.Reset(); }), mPitchEnv4("gain", [&]() {  for (auto &o : mUnisonOsc4) o.Reset(); })
+    Voice()
+      : mPwmEnv1("gain",
+                 [&]() {
+                   for (auto& o : mUnisonOsc1)
+                     o.Reset();
+                 })
+      , mPitchEnv1("gain",
+                   [&]() {
+                     for (auto& o : mUnisonOsc1)
+                       o.Reset();
+                   })
+      , mPwmEnv2("gain",
+                 [&]() {
+                   for (auto& o : mUnisonOsc2)
+                     o.Reset();
+                 })
+      , mPitchEnv2("gain",
+                   [&]() {
+                     for (auto& o : mUnisonOsc2)
+                       o.Reset();
+                   })
+      , mPwmEnv3("gain",
+                 [&]() {
+                   for (auto& o : mUnisonOsc3)
+                     o.Reset();
+                 })
+      , mPitchEnv3("gain",
+                   [&]() {
+                     for (auto& o : mUnisonOsc3)
+                       o.Reset();
+                   })
+      , mPwmEnv4("gain",
+                 [&]() {
+                   for (auto& o : mUnisonOsc4)
+                     o.Reset();
+                 })
+      , mPitchEnv4("gain", [&]() {
+        for (auto& o : mUnisonOsc4)
+          o.Reset();
+      })
     {
-      for (auto &c : extraUnisonCounts) c = 1;
-      for (auto &d : extraDetuneCents) d = 0.0;
+      for (auto& c : extraUnisonCounts)
+        c = 1;
+      for (auto& d : extraDetuneCents)
+        d = 0.0;
     }
 
     bool GetBusy() const override
@@ -87,23 +130,18 @@ public:
 
       return mPwmEnv1.GetBusy();
 
-      //  mPitchEnv1.GetBusy() ||
-      //  mPitchEnv2.GetBusy() ||
-      //  mPitchEnv3.GetBusy() ||
-      //  mPitchEnv4.GetBusy() ||
-      //  mPwmEnv1.GetBusy() ||
-      //  mPwmEnv2.GetBusy() ||
-      //  mPwmEnv3.GetBusy() ||
-      //  mPwmEnv4.GetBusy();
-
     }
 
     void Trigger(double level, bool isRetrigger) override
     {
-      for (auto &o : mUnisonOsc1) o.Reset();
-      for (auto &o : mUnisonOsc2) o.Reset();
-      for (auto &o : mUnisonOsc3) o.Reset();
-      for (auto &o : mUnisonOsc4) o.Reset();
+      for (auto& o : mUnisonOsc1)
+        o.Reset();
+      for (auto& o : mUnisonOsc2)
+        o.Reset();
+      for (auto& o : mUnisonOsc3)
+        o.Reset();
+      for (auto& o : mUnisonOsc4)
+        o.Reset();
 
 
       if (isRetrigger)
@@ -143,20 +181,25 @@ public:
     }
 
 
-void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
+    void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
     {
       double pitch = mInputs[kVoiceControlPitch].endValue;
       double pitchBend = mInputs[kVoiceControlPitchBend].endValue;
       double velocity = mInputs[kVoiceControlGate].endValue * 127.f;
 
+      //bool externalProtect = mInputs[kInputProtect].endValue >= 0.5;
+      bool externalProtect = true;
+
       mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
-      int oscId = (velocity + 1) * 4 / 129; // Assuming 4 core oscillator groups
+      int oscId = (velocity + 1) * 4 / 129;
       if (oscId > 3)
         oscId = 3;
 
+
       ADSREnvelope<T>& mPwmEnv = *(all_envs.at(oscId));
       ADSREnvelope<T>& mPitchEnv = *(all_envs.at(oscId + 4));
+
 
       double pitchModStrength = pitchModStrengths[oscId];
       double pitchOffsetStrength = pitchOffsetStrengths[oscId];
@@ -164,87 +207,220 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
       double pwmOffsetStrength = pwmOffsetStrengths[oscId];
       bool pwmKeyTrack = pwmKeyTracks[oscId];
 
-      // Cache pointer to the selected unison group array
+
       std::array<VaiaOscillator<T>, 8>* arr = nullptr;
+
       switch (oscId)
       {
       case 0:
         arr = &mUnisonOsc1;
         break;
+
       case 1:
         arr = &mUnisonOsc2;
         break;
+
       case 2:
         arr = &mUnisonOsc3;
         break;
+
       default:
         arr = &mUnisonOsc4;
         break;
       }
 
+
       int unison = extraUnisonCounts[oscId];
+
       if (unison < 1)
         unison = 1;
+
       if (unison > 8)
         unison = 8;
 
+
       double detuneRange = extraDetuneCents[oscId];
+
 
       for (auto i = startIdx; i < startIdx + nFrames; ++i)
       {
+
+        // ============================================================
+        // External audio input
+        // mono sum -> dither -> hysteresis -> 1 bit
+        // ============================================================
+
+        bool hasExternal = false;
+        double externalBit = 0.0;
+
+
+        if (nInputs > 0)
+        {
+          double inputSample = 0.0;
+
+
+          // Mono input
+          if (nInputs == 1)
+          {
+            inputSample = inputs[0][i];
+          }
+          // Stereo input -> mono average
+          else
+          {
+            inputSample = (inputs[0][i] + inputs[1][i]) * 0.5;
+          }
+
+
+          // ----------------------------------------------------------
+          // Input dither
+          // ----------------------------------------------------------
+
+          double ditherAmount = mInputs[kInputDither].endValue;
+
+          if (ditherAmount > 0.0 && inputSample != 0.0)
+          {
+            double random = (static_cast<double>(rand()) / RAND_MAX) * 2.0 - 1.0;
+
+            inputSample += random * ditherAmount * 0.05;
+          }
+
+
+          // ----------------------------------------------------------
+          // Hysteresis comparator
+          // ----------------------------------------------------------
+
+          constexpr double threshold = 0.02;
+
+
+          externalBit = (inputSample > threshold) ? 1.0 : -1.0;
+          hasExternal = true;
+
+
+          // Protected input:
+          // add before noise stage so it becomes part of the signal
+          if (externalProtect)
+          {
+            outputs[0][i] += externalBit;
+            outputs[1][i] += externalBit;
+          }
+        }
+
+
+        // ============================================================
+        // Modulation
+        // ============================================================
+
         auto pitch_value = mPitchEnv.Process(inputs[kModPitchSustainSmoother1 + oscId][i]) * pitchModStrength + pitchOffsetStrength;
+
+
         auto pwm_value = (mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + oscId][i]) + mModWheel + inputs[kModPwmLFO1 + oscId][i]) * pwmModStrength + pwmOffsetStrength;
 
+
         double oscFreq = 440. * pow(2., pitch + pitchBend + inputs[kModPitchLFO1 + oscId][0] + pitch_value);
+
+
         double pwmFunc = (pwmKeyTrack ? pwm_value * (oscFreq / 440.0f) : pwm_value);
 
-        // Restored original low-pitch noise mappings
+
+        // ============================================================
+        // Noise / oscillator processing
+        // ============================================================
+
         if (pitch < -5.74 && velocity > 1.0)
         {
           double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
+
+
           if (tempNoise < 0.0f)
             tempNoise = 0.0f;
-          outputs[0][i] = outputs[1][i] = tempNoise;
+
+
+          if (!externalProtect)
+          {
+            outputs[0][i] = outputs[1][i] = tempNoise;
+          }
+          else
+          {
+            outputs[0][i] += tempNoise;
+            outputs[1][i] += tempNoise;
+          }
         }
         else if (pitch < -5.66 && velocity > 1.0)
         {
           if (i > startIdx && i % 4 == 3)
           {
             double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
+
+
             if (tempNoise < 0.0f)
               tempNoise = 0.0f;
-            outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = tempNoise;
+
+
+            if (!externalProtect)
+            {
+              outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = tempNoise;
+            }
+            else
+            {
+              outputs[0][i] += tempNoise;
+              outputs[1][i] += tempNoise;
+            }
           }
         }
+
+
         else if (pitch < -5.58 && velocity > 1.0)
         {
           if (i > startIdx && i % 8 == 7)
           {
             double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
+
+
             if (tempNoise < 0.0f)
               tempNoise = 0.0f;
-            outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = outputs[0][i - 4] =
-              outputs[1][i - 4] = outputs[0][i - 5] = outputs[1][i - 5] = outputs[0][i - 6] = outputs[1][i - 6] = outputs[0][i - 7] = outputs[1][i - 7] = outputs[0][i] = outputs[1][i] = tempNoise;
+
+
+            if (!externalProtect)
+            {
+              outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = outputs[0][i - 4] =
+                outputs[1][i - 4] = outputs[0][i - 5] = outputs[1][i - 5] = outputs[0][i - 6] = outputs[1][i - 6] = outputs[0][i - 7] = outputs[1][i - 7] = tempNoise;
+            }
+            else
+            {
+              outputs[0][i] += tempNoise;
+              outputs[1][i] += tempNoise;
+            }
           }
         }
+
+
         else
         {
           bool anyHigh = false;
 
+
           for (int u = 0; u < unison; ++u)
           {
             double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
+
+
             double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
 
+
             auto& unisonosc = (*arr)[u];
+
             unisonosc.SetPWM(pwmFunc);
+
+
             if (unisonosc.Process(freq) > 0.0)
             {
               anyHigh = true;
             }
           }
 
+
           double base = anyHigh ? 1.0 : -1.0;
+
 
           if (algo == OSC_Algorithm::ALGO_PIN_PULSE)
           {
@@ -257,62 +433,43 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
         }
 
 
-        if (nInputs > 0)
+        // ============================================================
+        // External input normal mode
+        //
+        // Noise is allowed to overwrite/duck it
+        // ============================================================
+
+        if (hasExternal && !externalProtect)
         {
-          constexpr double threshold = 0.02;
-
-          double inputSample = 0.0;
-
-          // Mono input
-          if (nInputs == 1)
-          {
-            inputSample = inputs[0][i];
-          }
-          // Stereo input -> mono sum
-          else
-          {
-            inputSample = (inputs[0][i] + inputs[1][i]) * 0.5;
-          }
-
-
-          // Hysteresis comparator
-          if (inputSample > threshold)
-          {
-            mInputBitState = true;
-          }
-          else if (inputSample < -threshold)
-          {
-            mInputBitState = false;
-          }
-
-
-          double inputBit = mInputBitState ? 1.0 : -1.0;
-
-
-          // Add mono 1-bit input to stereo output
-          outputs[0][i] += inputBit;
-          outputs[1][i] += inputBit;
+          outputs[0][i] += externalBit;
+          outputs[1][i] += externalBit;
         }
-      }
+
+
+      } // end sample loop
     }
 
     void SetSampleRateAndBlockSize(double sampleRate, int blockSize) override
     {
 
-      for (auto &o : mUnisonOsc1) o.SetSampleRate(sampleRate);
-      for (auto &o : mUnisonOsc2) o.SetSampleRate(sampleRate);
-      for (auto &o : mUnisonOsc3) o.SetSampleRate(sampleRate);
-      for (auto &o : mUnisonOsc4) o.SetSampleRate(sampleRate);
+      for (auto& o : mUnisonOsc1)
+        o.SetSampleRate(sampleRate);
+      for (auto& o : mUnisonOsc2)
+        o.SetSampleRate(sampleRate);
+      for (auto& o : mUnisonOsc3)
+        o.SetSampleRate(sampleRate);
+      for (auto& o : mUnisonOsc4)
+        o.SetSampleRate(sampleRate);
 
-       mPitchEnv1.SetSampleRate(sampleRate);
-       mPitchEnv2.SetSampleRate(sampleRate);
-       mPitchEnv3.SetSampleRate(sampleRate);
-       mPitchEnv4.SetSampleRate(sampleRate);
-       
-        mPwmEnv1.SetSampleRate(sampleRate);
-        mPwmEnv2.SetSampleRate(sampleRate);
-        mPwmEnv3.SetSampleRate(sampleRate);
-        mPwmEnv4.SetSampleRate(sampleRate);
+      mPitchEnv1.SetSampleRate(sampleRate);
+      mPitchEnv2.SetSampleRate(sampleRate);
+      mPitchEnv3.SetSampleRate(sampleRate);
+      mPitchEnv4.SetSampleRate(sampleRate);
+
+      mPwmEnv1.SetSampleRate(sampleRate);
+      mPwmEnv2.SetSampleRate(sampleRate);
+      mPwmEnv3.SetSampleRate(sampleRate);
+      mPwmEnv4.SetSampleRate(sampleRate);
 
       mTimbreBuffer.Resize(blockSize);
     }
@@ -347,8 +504,7 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
     ADSREnvelope<T> mPitchEnv4{};
 
 
-
-   std::array<VaiaOscillator<T>*, osc_count> all_oscs{&mUnisonOsc1[0], &mUnisonOsc1[1], &mUnisonOsc1[2], &mUnisonOsc1[3], &mUnisonOsc1[4], &mUnisonOsc1[5], &mUnisonOsc1[6], &mUnisonOsc1[7],
+    std::array<VaiaOscillator<T>*, osc_count> all_oscs{&mUnisonOsc1[0], &mUnisonOsc1[1], &mUnisonOsc1[2], &mUnisonOsc1[3], &mUnisonOsc1[4], &mUnisonOsc1[5], &mUnisonOsc1[6], &mUnisonOsc1[7],
                                                        &mUnisonOsc2[0], &mUnisonOsc2[1], &mUnisonOsc2[2], &mUnisonOsc2[3], &mUnisonOsc2[4], &mUnisonOsc2[5], &mUnisonOsc2[6], &mUnisonOsc2[7],
                                                        &mUnisonOsc3[0], &mUnisonOsc3[1], &mUnisonOsc3[2], &mUnisonOsc3[3], &mUnisonOsc3[4], &mUnisonOsc3[5], &mUnisonOsc3[6], &mUnisonOsc3[7],
                                                        &mUnisonOsc4[0], &mUnisonOsc4[1], &mUnisonOsc4[2], &mUnisonOsc4[3], &mUnisonOsc4[4], &mUnisonOsc4[5], &mUnisonOsc4[6], &mUnisonOsc4[7]};
@@ -369,7 +525,7 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
 
     OSC_Algorithm algo = used_algo;
     WDL_TypedBuf<float> mTimbreBuffer;
-    double mModWheel{ 0.0 };
+    double mModWheel{0.0};
 
 
     // noise generator for test
@@ -397,7 +553,7 @@ public:
 
   void CentralizeLFO(T* pToCentralize, int nFrames, T levelScalar)
   {
-    //mPitchLFO1.
+    // mPitchLFO1.
     for (int s = 0; s < nFrames; ++s)
     {
       pToCentralize[s] -= levelScalar / 2.0f;
@@ -422,12 +578,12 @@ public:
     mPwmLFO2.ProcessBlock(mModulations.GetList()[kModPwmLFO2], nFrames, qnPos, transportIsRunning, tempo);
     CentralizeLFO(mModulations.GetList()[kModPitchLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
     CentralizeLFO(mModulations.GetList()[kModPwmLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-   
+
     mPitchLFO3.ProcessBlock(mModulations.GetList()[kModPitchLFO3], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO3.ProcessBlock(mModulations.GetList()[kModPwmLFO3], nFrames, qnPos, transportIsRunning, tempo);
     CentralizeLFO(mModulations.GetList()[kModPitchLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
     CentralizeLFO(mModulations.GetList()[kModPwmLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-   
+
     mPitchLFO4.ProcessBlock(mModulations.GetList()[kModPitchLFO4], nFrames, qnPos, transportIsRunning, tempo);
     mPwmLFO4.ProcessBlock(mModulations.GetList()[kModPwmLFO4], nFrames, qnPos, transportIsRunning, tempo);
     CentralizeLFO(mModulations.GetList()[kModPitchLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
@@ -489,10 +645,7 @@ public:
     }
   }
 
-  void ProcessMidiMsg(const IMidiMsg& msg)
-  {
-    mSynth.AddMidiMsgToQueue(msg);
-  }
+  void ProcessMidiMsg(const IMidiMsg& msg) { mSynth.AddMidiMsgToQueue(msg); }
 
   void SetParam(int paramIdx, double value)
   {
@@ -515,13 +668,9 @@ public:
       break;
     case kParamPwmAttack1:
     case kParamPwmDecay1:
-    case kParamPwmRelease1:
-    {
+    case kParamPwmRelease1: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPwmAttack1));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv1.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv1.SetStageTime(stage, value); });
       break;
     }
     case kParamPwmLFODepth1:
@@ -540,22 +689,13 @@ public:
       mPwmLFO1.SetShape(static_cast<int>(value));
       break;
     case kParamPwmModPow1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[0] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[0] = value; });
       break;
     case kParamPwmOffset1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[0] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[0] = value; });
       break;
     case kParamPwmKeyTrack1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value > 0.5;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value > 0.5; });
       break;
 
     case kParamPitchSustain1:
@@ -563,13 +703,9 @@ public:
       break;
     case kParamPitchAttack1:
     case kParamPitchDecay1:
-    case kParamPitchRelease1:
-    {
+    case kParamPitchRelease1: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPitchAttack1));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv1.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv1.SetStageTime(stage, value); });
       break;
     }
     case kParamPitchLFODepth1:
@@ -588,22 +724,13 @@ public:
       mPitchLFO1.SetShape(static_cast<int>(value));
       break;
     case kParamPitchModPow1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[0] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[0] = value; });
       break;
     case kParamPitchOffset1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[0] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[0] = value; });
       break;
     case kParamPitchKeyTrack1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[0] = value; });
       break;
 
       // OSC 2
@@ -612,13 +739,9 @@ public:
       break;
     case kParamPwmAttack2:
     case kParamPwmDecay2:
-    case kParamPwmRelease2:
-    {
+    case kParamPwmRelease2: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPwmAttack2));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv2.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv2.SetStageTime(stage, value); });
       break;
     }
     case kParamPwmLFODepth2:
@@ -637,22 +760,13 @@ public:
       mPwmLFO2.SetShape(static_cast<int>(value));
       break;
     case kParamPwmModPow2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[1] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[1] = value; });
       break;
     case kParamPwmOffset2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[1] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[1] = value; });
       break;
     case kParamPwmKeyTrack2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value > 0.5;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value > 0.5; });
       break;
 
     case kParamPitchSustain2:
@@ -660,13 +774,9 @@ public:
       break;
     case kParamPitchAttack2:
     case kParamPitchDecay2:
-    case kParamPitchRelease2:
-    {
+    case kParamPitchRelease2: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPitchAttack2));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv2.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv2.SetStageTime(stage, value); });
       break;
     }
     case kParamPitchLFODepth2:
@@ -685,22 +795,13 @@ public:
       mPitchLFO2.SetShape(static_cast<int>(value));
       break;
     case kParamPitchModPow2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[1] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[1] = value; });
       break;
     case kParamPitchOffset2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[1] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[1] = value; });
       break;
     case kParamPitchKeyTrack2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[1] = value; });
       break;
       // OSC 3
     case kParamPwmSustain3:
@@ -708,13 +809,9 @@ public:
       break;
     case kParamPwmAttack3:
     case kParamPwmDecay3:
-    case kParamPwmRelease3:
-    {
+    case kParamPwmRelease3: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPwmAttack3));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv3.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv3.SetStageTime(stage, value); });
       break;
     }
     case kParamPwmLFODepth3:
@@ -733,22 +830,13 @@ public:
       mPwmLFO3.SetShape(static_cast<int>(value));
       break;
     case kParamPwmModPow3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[2] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[2] = value; });
       break;
     case kParamPwmOffset3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[2] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[2] = value; });
       break;
     case kParamPwmKeyTrack3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[2] = value > 0.5;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[2] = value > 0.5; });
       break;
 
     case kParamPitchSustain3:
@@ -756,13 +844,9 @@ public:
       break;
     case kParamPitchAttack3:
     case kParamPitchDecay3:
-    case kParamPitchRelease3:
-    {
+    case kParamPitchRelease3: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPitchAttack3));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv3.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv3.SetStageTime(stage, value); });
       break;
     }
     case kParamPitchLFODepth3:
@@ -781,22 +865,13 @@ public:
       mPitchLFO3.SetShape(static_cast<int>(value));
       break;
     case kParamPitchModPow3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[2] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[2] = value; });
       break;
     case kParamPitchOffset3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[2] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[2] = value; });
       break;
     case kParamPitchKeyTrack3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[2] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[2] = value; });
       break;
       // OSC 4
     case kParamPwmSustain4:
@@ -804,13 +879,9 @@ public:
       break;
     case kParamPwmAttack4:
     case kParamPwmDecay4:
-    case kParamPwmRelease4:
-    {
+    case kParamPwmRelease4: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPwmAttack4));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv4.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPwmEnv4.SetStageTime(stage, value); });
       break;
     }
     case kParamPwmLFODepth4:
@@ -829,22 +900,13 @@ public:
       mPwmLFO4.SetShape(static_cast<int>(value));
       break;
     case kParamPwmModPow4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[3] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmModStrengths[3] = value; });
       break;
     case kParamPwmOffset4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[3] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmOffsetStrengths[3] = value; });
       break;
     case kParamPwmKeyTrack4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[3] = value > 0.5;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pwmKeyTracks[3] = value > 0.5; });
       break;
 
     case kParamPitchSustain4:
@@ -852,13 +914,9 @@ public:
       break;
     case kParamPitchAttack4:
     case kParamPitchDecay4:
-    case kParamPitchRelease4:
-    {
+    case kParamPitchRelease4: {
       EEnvStage stage = static_cast<EEnvStage>(EEnvStage::kAttack + (paramIdx - kParamPitchAttack4));
-      mSynth.ForEachVoice([stage, value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv4.SetStageTime(stage, value);
-        });
+      mSynth.ForEachVoice([stage, value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).mPitchEnv4.SetStageTime(stage, value); });
       break;
     }
     case kParamPitchLFODepth4:
@@ -877,94 +935,93 @@ public:
       mPitchLFO4.SetShape(static_cast<int>(value));
       break;
     case kParamPitchModPow4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[3] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchModStrengths[3] = value; });
       break;
     case kParamPitchOffset4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[3] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchOffsetStrengths[3] = value; });
       break;
     case kParamPitchKeyTrack4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[3] = value;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) { dynamic_cast<OneBitPlusDSP::Voice&>(voice).pitchKeyTrackStrengths[3] = value; });
       break;
     case kParamExtraUnison1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          int v = static_cast<int>(value);
-          if (v < 1) v = 1;
-          if (v > 8) v = 8;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[0] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        int v = static_cast<int>(value);
+        if (v < 1)
+          v = 1;
+        if (v > 8)
+          v = 8;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[0] = v;
+      });
       break;
     case kParamExtraDetune1:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          double v = value;
-          if (v < 0.0) v = 0.0;
-          if (v > 100.0) v = 100.0;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[0] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        double v = value;
+        if (v < 0.0)
+          v = 0.0;
+        if (v > 100.0)
+          v = 100.0;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[0] = v;
+      });
       break;
     case kParamExtraUnison2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          int v = static_cast<int>(value);
-          if (v < 1) v = 1;
-          if (v > 8) v = 8;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[1] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        int v = static_cast<int>(value);
+        if (v < 1)
+          v = 1;
+        if (v > 8)
+          v = 8;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[1] = v;
+      });
       break;
     case kParamExtraDetune2:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          double v = value;
-          if (v < 0.0) v = 0.0;
-          if (v > 100.0) v = 100.0;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[1] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        double v = value;
+        if (v < 0.0)
+          v = 0.0;
+        if (v > 100.0)
+          v = 100.0;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[1] = v;
+      });
       break;
     case kParamExtraUnison3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          int v = static_cast<int>(value);
-          if (v < 1) v = 1;
-          if (v > 8) v = 8;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[2] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        int v = static_cast<int>(value);
+        if (v < 1)
+          v = 1;
+        if (v > 8)
+          v = 8;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[2] = v;
+      });
       break;
     case kParamExtraDetune3:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          double v = value;
-          if (v < 0.0) v = 0.0;
-          if (v > 100.0) v = 100.0;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[2] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        double v = value;
+        if (v < 0.0)
+          v = 0.0;
+        if (v > 100.0)
+          v = 100.0;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[2] = v;
+      });
       break;
     case kParamExtraUnison4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          int v = static_cast<int>(value);
-          if (v < 1) v = 1;
-          if (v > 8) v = 8;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[3] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        int v = static_cast<int>(value);
+        if (v < 1)
+          v = 1;
+        if (v > 8)
+          v = 8;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraUnisonCounts[3] = v;
+      });
       break;
     case kParamExtraDetune4:
-      mSynth.ForEachVoice([value](SynthVoice& voice)
-        {
-          double v = value;
-          if (v < 0.0) v = 0.0;
-          if (v > 100.0) v = 100.0;
-          dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[3] = v;
-        });
+      mSynth.ForEachVoice([value](SynthVoice& voice) {
+        double v = value;
+        if (v < 0.0)
+          v = 0.0;
+        if (v > 100.0)
+          v = 100.0;
+        dynamic_cast<OneBitPlusDSP::Voice&>(voice).extraDetuneCents[3] = v;
+      });
       break;
       // DEFAULT
     default:
@@ -973,12 +1030,11 @@ public:
   }
 
 public:
-
   OSC_Algorithm algo = used_algo;
 
-  MidiSynth mSynth{ VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize };
+  MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
   WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
-  WDL_PtrList<T> mModulations; // Ptrlist for global modulations
+  WDL_PtrList<T> mModulations;      // Ptrlist for global modulations
   LogParamSmooth<T, kNumModulations> mParamSmoother;
   std::array<sample, kNumModulations> mParamsToSmooth{};
   LFO<T> mPitchLFO1;
@@ -992,5 +1048,4 @@ public:
 
   LFO<T> mPitchLFO4;
   LFO<T> mPwmLFO4;
-
 };

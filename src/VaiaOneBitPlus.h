@@ -154,6 +154,12 @@ enum EParams
   kParamExtraUnison4,
   kParamExtraDetune4,
 
+
+
+  // external signal modulation
+    kInputProtect,
+  kInputDither,
+
   kNumParams
 };
 
