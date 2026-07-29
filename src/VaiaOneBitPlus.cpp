@@ -310,7 +310,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f+vert, 970.0, 115.0f+vert), kParamPitchOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f+vert, 1075.0, 85.0f+vert), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f+vert, 1075.0, 85.0f+vert), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
     pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f+vert, 1130.0, 95.0f+vert), kParamExtraDetune1, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
     //////////////// OSC 2
@@ -363,7 +363,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset2, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison2, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison2, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
     pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune2, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
     //////////////// OSC 3
@@ -416,7 +416,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset3, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison3, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison3, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
     pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune3, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
@@ -470,7 +470,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset4, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison4, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f"));
+    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison4, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
     pGraphics->AttachControl(new IVKnobControl(IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune4, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
   };

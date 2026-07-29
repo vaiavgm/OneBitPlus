@@ -24,7 +24,7 @@
 #include "VaiaOscillator.h"
 
 
-constexpr unsigned int osc_count = 4U; // update this when adding more OSCs
+constexpr unsigned int osc_count = 32U; // update this when adding more OSCs
 constexpr unsigned int env_count = osc_count * 2;
 
 enum EModulations
@@ -73,10 +73,10 @@ public:
   {
 
   public:
-    Voice() : mPwmEnv1("gain", [&]() { mOSC1.Reset(); for (auto &o : mUnisonOsc1) o.Reset(); }), mPitchEnv1("gain", [&]() { mOSC1.Reset(); for (auto &o : mUnisonOsc1) o.Reset(); }),
-      mPwmEnv2("gain", [&]() { mOSC2.Reset(); for (auto &o : mUnisonOsc2) o.Reset(); }), mPitchEnv2("gain", [&]() { mOSC2.Reset(); for (auto &o : mUnisonOsc2) o.Reset(); }),
-      mPwmEnv3("gain", [&]() { mOSC3.Reset(); for (auto &o : mUnisonOsc3) o.Reset(); }), mPitchEnv3("gain", [&]() { mOSC3.Reset(); for (auto &o : mUnisonOsc3) o.Reset(); }),
-      mPwmEnv4("gain", [&]() { mOSC4.Reset(); for (auto &o : mUnisonOsc4) o.Reset(); }), mPitchEnv4("gain", [&]() { mOSC4.Reset(); for (auto &o : mUnisonOsc4) o.Reset(); })
+    Voice() : mPwmEnv1("gain", [&]() {  for (auto &o : mUnisonOsc1) o.Reset(); }), mPitchEnv1("gain", [&]() { for (auto &o : mUnisonOsc1) o.Reset(); }),
+      mPwmEnv2("gain", [&]() {  for (auto &o : mUnisonOsc2) o.Reset(); }), mPitchEnv2("gain", [&]() {  for (auto &o : mUnisonOsc2) o.Reset(); }),
+      mPwmEnv3("gain", [&]() {  for (auto &o : mUnisonOsc3) o.Reset(); }), mPitchEnv3("gain", [&]() {  for (auto &o : mUnisonOsc3) o.Reset(); }),
+      mPwmEnv4("gain", [&]() {  for (auto &o : mUnisonOsc4) o.Reset(); }), mPitchEnv4("gain", [&]() {  for (auto &o : mUnisonOsc4) o.Reset(); })
     {
       for (auto &c : extraUnisonCounts) c = 1;
       for (auto &d : extraDetuneCents) d = 0.0;
@@ -100,13 +100,13 @@ public:
 
     void Trigger(double level, bool isRetrigger) override
     {
-      mOSC1.Reset();
+      //mOSC1.Reset();
       for (auto &o : mUnisonOsc1) o.Reset();
-      mOSC2.Reset();
+      //mOSC2.Reset();
       for (auto &o : mUnisonOsc2) o.Reset();
-      mOSC3.Reset();
+      //mOSC3.Reset();
       for (auto &o : mUnisonOsc3) o.Reset();
-      mOSC4.Reset();
+      //mOSC4.Reset();
       for (auto &o : mUnisonOsc4) o.Reset();
 
 
@@ -147,51 +147,67 @@ public:
     }
 
 
-    void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override // NOSONAR (hidden function)
+void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
     {
-      // inputs to the synthesizer can just fetch a value every block, like this:
-
       double pitch = mInputs[kVoiceControlPitch].endValue;
       double pitchBend = mInputs[kVoiceControlPitchBend].endValue;
       double velocity = mInputs[kVoiceControlGate].endValue * 127.f;
 
-      // or write the entire control ramp to a buffer, like this, to get sample-accurate ramps:
       mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
+      int oscId = (velocity + 1) * 4 / 129; // Assuming 4 core oscillator groups
+      if (oscId > 3)
+        oscId = 3;
 
-      // make sound output for each output channel
-
-      int oscId = (velocity+1) * osc_count / 129;
-      int envId = oscId; // there are 2 envs per osc
-
-      VaiaOscillator<T>& mOSC = *(all_oscs.at(oscId));
-      ADSREnvelope<T>& mPwmEnv = *(all_envs.at(envId));
-      ADSREnvelope<T>& mPitchEnv = *(all_envs.at(envId + env_count / 2));
+      ADSREnvelope<T>& mPwmEnv = *(all_envs.at(oscId));
+      ADSREnvelope<T>& mPitchEnv = *(all_envs.at(oscId + 4));
 
       double pitchModStrength = pitchModStrengths[oscId];
       double pitchOffsetStrength = pitchOffsetStrengths[oscId];
-
       double pwmModStrength = pwmModStrengths[oscId];
       double pwmOffsetStrength = pwmOffsetStrengths[oscId];
-
       bool pwmKeyTrack = pwmKeyTracks[oscId];
+
+      // Cache pointer to the selected unison group array
+      std::array<VaiaOscillator<T>, 8>* arr = nullptr;
+      switch (oscId)
+      {
+      case 0:
+        arr = &mUnisonOsc1;
+        break;
+      case 1:
+        arr = &mUnisonOsc2;
+        break;
+      case 2:
+        arr = &mUnisonOsc3;
+        break;
+      default:
+        arr = &mUnisonOsc4;
+        break;
+      }
+
+      int unison = extraUnisonCounts[oscId];
+      if (unison < 1)
+        unison = 1;
+      if (unison > 8)
+        unison = 8;
+
+      double detuneRange = extraDetuneCents[oscId];
 
       for (auto i = startIdx; i < startIdx + nFrames; ++i)
       {
-
-
         auto pitch_value = mPitchEnv.Process(inputs[kModPitchSustainSmoother1 + oscId][i]) * pitchModStrength + pitchOffsetStrength;
         auto pwm_value = (mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + oscId][i]) + mModWheel + inputs[kModPwmLFO1 + oscId][i]) * pwmModStrength + pwmOffsetStrength;
 
-        // convert from "1v/oct" pitch space to frequency in Hertz
-        double osc1Freq = 440. * pow(2., pitch + pitchBend + inputs[kModPitchLFO1 + oscId][0] + pitch_value);
-        double pwmFunc = (pwmKeyTrack ? pwm_value * (osc1Freq / 440.0f) : pwm_value);
+        double oscFreq = 440. * pow(2., pitch + pitchBend + inputs[kModPitchLFO1 + oscId][0] + pitch_value);
+        double pwmFunc = (pwmKeyTrack ? pwm_value * (oscFreq / 440.0f) : pwm_value);
 
-
+        // Restored original low-pitch noise mappings
         if (pitch < -5.74 && velocity > 1.0)
         {
           double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
-          if (tempNoise < 0.0f) tempNoise = 0.0f;
+          if (tempNoise < 0.0f)
+            tempNoise = 0.0f;
           outputs[0][i] = outputs[1][i] = tempNoise;
         }
         else if (pitch < -5.66 && velocity > 1.0)
@@ -199,7 +215,8 @@ public:
           if (i > startIdx && i % 4 == 3)
           {
             double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
-            if (tempNoise < 0.0f) tempNoise = 0.0f;
+            if (tempNoise < 0.0f)
+              tempNoise = 0.0f;
             outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = tempNoise;
           }
         }
@@ -208,68 +225,38 @@ public:
           if (i > startIdx && i % 8 == 7)
           {
             double tempNoise = outputs[0][i] + (rand() % 255) > (velocity * (1 - mModWheel)) ? -0.9 : 1.1;
-            if (tempNoise < 0.0f) tempNoise = 0.0f;
-            outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = outputs[0][i - 4] = outputs[1][i - 4] = outputs[0][i - 5] = outputs[1][i - 5] = outputs[0][i - 6] = outputs[1][i - 6] = outputs[0][i - 7] = outputs[1][i - 7] = outputs[0][i] = outputs[1][i] = tempNoise;
+            if (tempNoise < 0.0f)
+              tempNoise = 0.0f;
+            outputs[0][i] = outputs[1][i] = outputs[0][i - 1] = outputs[1][i - 1] = outputs[0][i - 2] = outputs[1][i - 2] = outputs[0][i - 3] = outputs[1][i - 3] = outputs[0][i - 4] =
+              outputs[1][i - 4] = outputs[0][i - 5] = outputs[1][i - 5] = outputs[0][i - 6] = outputs[1][i - 6] = outputs[0][i - 7] = outputs[1][i - 7] = outputs[0][i] = outputs[1][i] = tempNoise;
           }
         }
         else
         {
+          bool anyHigh = false;
 
-          int unison = extraUnisonCounts[oscId] > 0 ? extraUnisonCounts[oscId] : 1;
-
-          double base = 0.0;
-
-          if (unison <= 1)
+          for (int u = 0; u < unison; ++u)
           {
-            mOSC.SetPWM(pwmFunc);
-            base = mOSC.Process(osc1Freq);
-          }
-          else
-          {
-            // pick correct unison array
-            std::array<VaiaOscillator<T>, 8>* arr = nullptr;
-            switch (oscId)
+            double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
+            double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
+
+            auto& uosc = (*arr)[u];
+            uosc.SetPWM(pwmFunc);
+            if (uosc.Process(freq) > 0.0)
             {
-            case 0: arr = &mUnisonOsc1; break;
-            case 1: arr = &mUnisonOsc2; break;
-            case 2: arr = &mUnisonOsc3; break;
-            default: arr = &mUnisonOsc4; break;
+              anyHigh = true;
             }
-
-            double detuneRange = extraDetuneCents[oscId]; // in cents
-            bool anyHigh = false;
-
-            for (int u = 0; u < unison; ++u)
-            {
-              double offsetCents = (unison == 1) ? 0.0 : (-detuneRange / 2.0 + (detuneRange * (double)u) / (double)(unison - 1));
-              double freq = osc1Freq * pow(2.0, offsetCents / 1200.0);
-              auto& uosc = (*arr)[u];
-              uosc.SetPWM(pwmFunc);
-              double out = uosc.Process(freq);
-              if (out > 0.0) anyHigh = true;
-            }
-
-            base = anyHigh ? 1.0 : -1.0;
           }
 
-          bool oldOutput, newOutput;
-          double temp = outputs[0][i] + base;
+          double base = anyHigh ? 1.0 : -1.0;
 
-          switch (algo)
+          if (algo == OSC_Algorithm::ALGO_PIN_PULSE)
           {
-
-          case OSC_Algorithm::ALGO_PIN_PULSE:
-
-            oldOutput = outputs[0][i] > 0.0f;
-            newOutput = base > 0.0f;
-
-            if (newOutput)
+            if (base > 0.0f)
             {
               outputs[0][i] = 1.0f;
               outputs[1][i] = 1.0f;
             }
-
-            break;
           }
         }
       }
@@ -278,13 +265,13 @@ public:
     void SetSampleRateAndBlockSize(double sampleRate, int blockSize) override
     {
 
-      mOSC1.SetSampleRate(sampleRate);
+      //mOSC1.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc1) o.SetSampleRate(sampleRate);
-      mOSC2.SetSampleRate(sampleRate);
+     // mOSC2.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc2) o.SetSampleRate(sampleRate);
-      mOSC3.SetSampleRate(sampleRate);
+     // mOSC3.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc3) o.SetSampleRate(sampleRate);
-      mOSC4.SetSampleRate(sampleRate);
+     // mOSC4.SetSampleRate(sampleRate);
       for (auto &o : mUnisonOsc4) o.SetSampleRate(sampleRate);
 
        mPitchEnv1.SetSampleRate(sampleRate);
@@ -310,32 +297,35 @@ public:
     }
 
     // Type 1
-    VaiaOscillator<T> mOSC1{};
+    //VaiaOscillator<T> mOSC1{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc1{};
     ADSREnvelope<T> mPwmEnv1{};
     ADSREnvelope<T> mPitchEnv1{};
 
     // Type 2
-    VaiaOscillator<T> mOSC2{};
+    //VaiaOscillator<T> mOSC2{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc2{};
     ADSREnvelope<T> mPwmEnv2{};
     ADSREnvelope<T> mPitchEnv2{};
 
     // Type 3
-    VaiaOscillator<T> mOSC3{};
+    //VaiaOscillator<T> mOSC3{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc3{};
     ADSREnvelope<T> mPwmEnv3{};
     ADSREnvelope<T> mPitchEnv3{};
 
     // Type 4
-    VaiaOscillator<T> mOSC4{};
+    //VaiaOscillator<T> mOSC4{};
     std::array<VaiaOscillator<T>, 8> mUnisonOsc4{};
     ADSREnvelope<T> mPwmEnv4{};
     ADSREnvelope<T> mPitchEnv4{};
 
 
 
-    std::array<VaiaOscillator<T>*, osc_count> all_oscs {&mOSC1, &mOSC2, &mOSC3, &mOSC4};
+   std::array<VaiaOscillator<T>*, osc_count> all_oscs{&mUnisonOsc1[0], &mUnisonOsc1[1], &mUnisonOsc1[2], &mUnisonOsc1[3], &mUnisonOsc1[4], &mUnisonOsc1[5], &mUnisonOsc1[6], &mUnisonOsc1[7],
+                                                       &mUnisonOsc2[0], &mUnisonOsc2[1], &mUnisonOsc2[2], &mUnisonOsc2[3], &mUnisonOsc2[4], &mUnisonOsc2[5], &mUnisonOsc2[6], &mUnisonOsc2[7],
+                                                       &mUnisonOsc3[0], &mUnisonOsc3[1], &mUnisonOsc3[2], &mUnisonOsc3[3], &mUnisonOsc3[4], &mUnisonOsc3[5], &mUnisonOsc3[6], &mUnisonOsc3[7],
+                                                       &mUnisonOsc4[0], &mUnisonOsc4[1], &mUnisonOsc4[2], &mUnisonOsc4[3], &mUnisonOsc4[4], &mUnisonOsc4[5], &mUnisonOsc4[6], &mUnisonOsc4[7]};
     std::array<ADSREnvelope<T>*, env_count> all_envs{&mPwmEnv1, &mPwmEnv2, &mPwmEnv3, &mPwmEnv4, &mPitchEnv1, &mPitchEnv2, &mPitchEnv3, &mPitchEnv4};
 
 
