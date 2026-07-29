@@ -236,9 +236,9 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
             double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
             double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
 
-            auto& uosc = (*arr)[u];
-            uosc.SetPWM(pwmFunc);
-            if (uosc.Process(freq) > 0.0)
+            auto& unisonosc = (*arr)[u];
+            unisonosc.SetPWM(pwmFunc);
+            if (unisonosc.Process(freq) > 0.0)
             {
               anyHigh = true;
             }
@@ -254,6 +254,44 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
               outputs[1][i] = 1.0f;
             }
           }
+        }
+
+
+        if (nInputs > 0)
+        {
+          constexpr double threshold = 0.02;
+
+          double inputSample = 0.0;
+
+          // Mono input
+          if (nInputs == 1)
+          {
+            inputSample = inputs[0][i];
+          }
+          // Stereo input -> mono sum
+          else
+          {
+            inputSample = (inputs[0][i] + inputs[1][i]) * 0.5;
+          }
+
+
+          // Hysteresis comparator
+          if (inputSample > threshold)
+          {
+            mInputBitState = true;
+          }
+          else if (inputSample < -threshold)
+          {
+            mInputBitState = false;
+          }
+
+
+          double inputBit = mInputBitState ? 1.0 : -1.0;
+
+
+          // Add mono 1-bit input to stereo output
+          outputs[0][i] += inputBit;
+          outputs[1][i] += inputBit;
         }
       }
     }

@@ -13,7 +13,7 @@
 #define BUNDLE_MFR "Vaiaphraim"
 #define BUNDLE_DOMAIN "com"
 
-#define PLUG_CHANNEL_IO "0-2"
+#define PLUG_CHANNEL_IO "2-2"
 #define SHARED_RESOURCES_SUBPATH "OneBitPlus"
 
 #define PLUG_LATENCY 0
