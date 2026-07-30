@@ -57,6 +57,8 @@ public:
 
     int temp = squareLookup[pos % 2];
 
+
+
     return temp;
 
   }
