@@ -192,6 +192,8 @@ public:
   void OnIdle() override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
+  void ImportSample(const char* filePath);
+
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;
   ISender<1> mLFOVisSender;

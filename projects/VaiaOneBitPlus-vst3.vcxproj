@@ -330,6 +330,10 @@
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.h" />
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_View.h" />
     <ClInclude Include="..\src\config.h" />
+    <ClInclude Include="..\src\SampleData.h" />
+    <ClInclude Include="..\src\SampleLoader.h" />
+    <ClInclude Include="..\src\SampleOscillator.h" />
+    <ClInclude Include="..\src\SampleTools.h" />
     <ClInclude Include="..\src\VaiaOneBitPlus.h" />
     <ClInclude Include="..\src\VaiaOneBitPlus_DSP.h" />
     <ClInclude Include="..\src\VaiaOscillator.h" />
@@ -397,6 +401,7 @@
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3.cpp" />
     <ClCompile Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.cpp" />
     <ClCompile Include="..\..\..\WDL\win32_utf8.c" />
+    <ClCompile Include="..\src\SampleOscillator.cpp" />
     <ClCompile Include="..\src\VaiaOneBitPlus.cpp" />
     <ClCompile Include="..\src\VaiaOscillator.cpp" />
   </ItemGroup>

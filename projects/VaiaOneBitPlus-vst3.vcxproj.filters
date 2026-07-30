@@ -148,6 +148,9 @@
     <ClCompile Include="..\..\..\WDL\win32_utf8.c">
       <Filter>WDL</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\SampleOscillator.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\resources\resource.h">
@@ -388,6 +391,18 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\VaiaOscillator.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleData.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleOscillator.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleLoader.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleTools.h">
       <Filter>src</Filter>
     </ClInclude>
   </ItemGroup>

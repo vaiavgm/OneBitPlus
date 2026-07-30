@@ -26,7 +26,12 @@
 #include <cstdint>
 
 #include "VaiaOneBitPlus.h"
+#include "SampleData.h"
+#include "SampleOscillator.h"
 #include "VaiaOscillator.h"
+
+#include <algorithm>
+#include <cstring>
 
 
 constexpr unsigned int osc_count = 32U; // update this when adding more OSCs
@@ -73,56 +78,129 @@ template <typename T>
 class OneBitPlusDSP
 {
 public:
+  SampleData::SampleManager mSampleManager;
+
 #pragma mark - Voice
   class Voice : public SynthVoice
   {
+  private:
+    OneBitPlusDSP& mParentDSP;
 
   public:
-    Voice()
-      : mPwmEnv1("gain",
-                 [&]() {
-                   for (auto& o : mUnisonOsc1)
-                     o.Reset();
-                 })
+
+
+    
+    // Type 1
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc1{};
+    ADSREnvelope<T> mPwmEnv1{};
+    ADSREnvelope<T> mPitchEnv1{};
+
+    // Type 2
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc2{};
+    ADSREnvelope<T> mPwmEnv2{};
+    ADSREnvelope<T> mPitchEnv2{};
+
+    // Type 3
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc3{};
+    ADSREnvelope<T> mPwmEnv3{};
+    ADSREnvelope<T> mPitchEnv3{};
+
+    // Type 4
+    std::array<VaiaOscillator<T>, 8> mUnisonOsc4{};
+    ADSREnvelope<T> mPwmEnv4{};
+    ADSREnvelope<T> mPitchEnv4{};
+
+
+    // sample osc
+    SampleOscillator<T> mSampleOsc{};
+
+    // lightweight debug counter to rate-limit logging inside the voice
+    int mDebugSampleCounter = 0;
+
+
+    std::array<VaiaOscillator<T>*, osc_count> all_oscs{&mUnisonOsc1[0], &mUnisonOsc1[1], &mUnisonOsc1[2], &mUnisonOsc1[3], &mUnisonOsc1[4], &mUnisonOsc1[5], &mUnisonOsc1[6], &mUnisonOsc1[7],
+                                                       &mUnisonOsc2[0], &mUnisonOsc2[1], &mUnisonOsc2[2], &mUnisonOsc2[3], &mUnisonOsc2[4], &mUnisonOsc2[5], &mUnisonOsc2[6], &mUnisonOsc2[7],
+                                                       &mUnisonOsc3[0], &mUnisonOsc3[1], &mUnisonOsc3[2], &mUnisonOsc3[3], &mUnisonOsc3[4], &mUnisonOsc3[5], &mUnisonOsc3[6], &mUnisonOsc3[7],
+                                                       &mUnisonOsc4[0], &mUnisonOsc4[1], &mUnisonOsc4[2], &mUnisonOsc4[3], &mUnisonOsc4[4], &mUnisonOsc4[5], &mUnisonOsc4[6], &mUnisonOsc4[7]};
+    std::array<ADSREnvelope<T>*, env_count> all_envs{&mPwmEnv1, &mPwmEnv2, &mPwmEnv3, &mPwmEnv4, &mPitchEnv1, &mPitchEnv2, &mPitchEnv3, &mPitchEnv4};
+
+
+    std::array<bool, osc_count> pwmKeyTracks{};
+    std::array<double, osc_count> pwmModStrengths{};
+    std::array<double, osc_count> pwmOffsetStrengths{};
+    std::array<double, osc_count> pitchKeyTrackStrengths{};
+    std::array<double, osc_count> pitchModStrengths{};
+    std::array<double, osc_count> pitchOffsetStrengths{};
+
+    // Unison controls per-voice (1..8) and detune in cents (0..100)
+    std::array<int, osc_count> extraUnisonCounts{};
+    std::array<double, osc_count> extraDetuneCents{};
+
+
+    OSC_Algorithm algo = used_algo;
+    WDL_TypedBuf<float> mTimbreBuffer;
+    double mModWheel{0.0};
+
+
+    // noise generator for test
+    uint32_t mRandSeed = 0;
+
+   Voice(OneBitPlusDSP& parent)
+      : mParentDSP(parent)
+      , mPwmEnv1("gain",
+        [&]()
+        {
+          for (auto& o : mUnisonOsc1)
+            o.Reset();
+
+        })
       , mPitchEnv1("gain",
-                   [&]() {
-                     for (auto& o : mUnisonOsc1)
-                       o.Reset();
-                   })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc1)
+            o.Reset();
+
+        })
       , mPwmEnv2("gain",
-                 [&]() {
-                   for (auto& o : mUnisonOsc2)
-                     o.Reset();
-                 })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc2)
+            o.Reset();
+        })
       , mPitchEnv2("gain",
-                   [&]() {
-                     for (auto& o : mUnisonOsc2)
-                       o.Reset();
-                   })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc2)
+            o.Reset();
+        })
       , mPwmEnv3("gain",
-                 [&]() {
-                   for (auto& o : mUnisonOsc3)
-                     o.Reset();
-                 })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc3)
+            o.Reset();
+        })
       , mPitchEnv3("gain",
-                   [&]() {
-                     for (auto& o : mUnisonOsc3)
-                       o.Reset();
-                   })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc3)
+            o.Reset();
+
+        })
       , mPwmEnv4("gain",
-                 [&]() {
-                   for (auto& o : mUnisonOsc4)
-                     o.Reset();
-                 })
-      , mPitchEnv4("gain", [&]() {
-        for (auto& o : mUnisonOsc4)
-          o.Reset();
-      })
+        [&]()
+        {
+          for (auto& o : mUnisonOsc4)
+            o.Reset();
+        })
+      , mPitchEnv4("gain", [&]()
+        {
+          for (auto& o : mUnisonOsc4)
+            o.Reset();
+        })
+
     {
-      for (auto& c : extraUnisonCounts)
-        c = 1;
-      for (auto& d : extraDetuneCents)
-        d = 0.0;
+      for (auto& c : extraUnisonCounts) {  c = 1; }
+      for (auto& d : extraDetuneCents) { d = 0.0; }
     }
 
     bool GetBusy() const override
@@ -142,6 +220,11 @@ public:
         o.Reset();
       for (auto& o : mUnisonOsc4)
         o.Reset();
+
+      mSampleOsc.Reset();
+      auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
+      mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);
+
 
 
       if (isRetrigger)
@@ -180,17 +263,100 @@ public:
       mPwmEnv4.Release();
     }
 
+inline void ProcessNoise1(T** outputs, int i, double noiseThreshold)
+    {
+      double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
+      if (tempNoise < 0.0f)
+        tempNoise = 0.0f;
 
-void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
+      outputs[0][i] = outputs[1][i] = tempNoise;
+    }
+
+    inline void ProcessNoise2(T** outputs, int i, double noiseThreshold, int& lastClock4, double& tempNoise4)
+    {
+      int clock4 = i / 4;
+      if (clock4 != lastClock4)
+      {
+        lastClock4 = clock4;
+        double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
+        if (tempNoise < 0.0f)
+          tempNoise = 0.0f;
+        tempNoise4 = tempNoise;
+      }
+      outputs[0][i] = outputs[1][i] = tempNoise4;
+    }
+
+    inline void ProcessNoise3(T** outputs, int i, double noiseThreshold, int& lastClock8, double& tempNoise8)
+    {
+      int clock8 = i / 8;
+      if (clock8 != lastClock8)
+      {
+        lastClock8 = clock8;
+        double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
+        if (tempNoise < 0.0f)
+          tempNoise = 0.0f;
+        tempNoise8 = tempNoise;
+      }
+      outputs[0][i] = outputs[1][i] = tempNoise8;
+    }
+
+inline void ProcessSampleOscillator(T** outputs, int i, double oscFreq, SampleOscillator<T>* sampleOsc)
+    {
+      if (sampleOsc && algo == OSC_Algorithm::ALGO_PIN_PULSE)
+      {
+        // SampleOscillator already returns 1.0 or -1.0 natively
+        T sampleVal = sampleOsc->Process(440); // assume native A
+
+        T outputVal = outputs[0][i];
+
+        if (outputVal < 0.1f)
+        {
+          outputs[0][i] = sampleVal || outputVal;
+          outputs[1][i] = sampleVal || outputVal;
+        }
+      }
+    }
+
+    inline void ProcessStandardOscillators(
+      T** outputs, int i, double oscFreq, double pwmFunc, double velocity, int unison, double detuneRange, std::array<VaiaOscillator<T>, 8>* arr)
+    {
+      bool anyHigh = false;
+
+      for (int u = 0; u < unison; ++u)
+      {
+        double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
+        double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
+
+        auto& uosc = (*arr)[u];
+        uosc.SetPWM(pwmFunc);
+        if (uosc.Process(freq) > 0.0)
+        {
+          anyHigh = true;
+        }
+      }
+
+      double base = anyHigh ? 1.0 : -1.0;
+
+      if (algo == OSC_Algorithm::ALGO_PIN_PULSE)
+      {
+        if (base > 0.0f)
+        {
+          outputs[0][i] = 1.0f;
+          outputs[1][i] = 1.0f;
+        }
+      }
+    }
+
+    void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutputs, int startIdx, int nFrames) override
     {
       double pitch = mInputs[kVoiceControlPitch].endValue;
       double pitchBend = mInputs[kVoiceControlPitchBend].endValue;
       double velocity = mInputs[kVoiceControlGate].endValue * 127.f;
-      //double ditherAmount = mInputs[kInputDither].endValue;
+
+      double midiNote = (pitch * 12.0) + 69.1;
 
       mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
-      // Clean exact quartile mapping for oscId
       int velInt = static_cast<int>(std::round(velocity));
       int oscId = std::clamp((velInt > 0 ? velInt - 1 : 0) / 32, 0, 3);
 
@@ -204,6 +370,8 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
       bool pwmKeyTrack = pwmKeyTracks[oscId];
 
       std::array<VaiaOscillator<T>, 8>* arr = nullptr;
+   
+
       switch (oscId)
       {
       case 0:
@@ -223,24 +391,20 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
       int unison = std::clamp(extraUnisonCounts[oscId], 1, 8);
       double detuneRange = extraDetuneCents[oscId];
 
-      // Variables to safely hold the downsampled noise values
       double tempNoise4 = 0.0;
       double tempNoise8 = 0.0;
       int lastClock4 = -1;
       int lastClock8 = -1;
 
       for (auto i = startIdx; i < startIdx + nFrames; ++i)
-      {   
-
-        // Modulation & Oscillators
+      {
         auto pitch_value = mPitchEnv.Process(inputs[kModPitchSustainSmoother1 + oscId][i]) * pitchModStrength + pitchOffsetStrength;
         auto pwm_value = (mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + oscId][i]) + mModWheel + inputs[kModPwmLFO1 + oscId][i]) * pwmModStrength + pwmOffsetStrength;
 
         double oscFreq = 440.0 * pow(2.0, pitch + pitchBend + inputs[kModPitchLFO1 + oscId][i] + pitch_value);
         double pwmFunc = pwmKeyTrack ? (pwm_value * (oscFreq / 440.0f)) : pwm_value;
 
-        // Log PWM path values periodically for debugging. Use a relatively frequent rate
-        // so that tests without long audio runs still produce output.
+        /*
         if (++mDebugSampleCounter % 1024 == 0)
         {
           double envVal = mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + oscId][i]);
@@ -248,86 +412,31 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
           double modWheelVal = mModWheel;
           double modPow = pwmModStrength;
           double offsetVal = pwmOffsetStrength;
-          //MY_PRINTF("[VoiceDetailed] oscId=%d i=%d env=%f modWheel=%f lfo=%f modPow=%f offset=%f pwm_value=%f pwmFunc=%f oscFreq=%f\n",
-          //          oscId, i, envVal, modWheelVal, lfoVal, modPow, offsetVal, pwm_value, pwmFunc, oscFreq);
         }
+        */
 
-        // Precalculate noise threshold
         double noiseThreshold = velocity * (1.0 - mModWheel);
 
-        // ============================================================
-        // Noise / Oscillator Processing (Preserving the Buffer-Feedback Quirk)
-        // ============================================================
-
-        if (pitch < -5.74 && velocity > 0.0)
+        if (midiNote < 1 && velocity > 0.0)
         {
-          // Quirk preserved: reads outputs[0][i] to cross-modulate the noise condition
-          double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
-          if (tempNoise < 0.0f)
-            tempNoise = 0.0f;
-
-          outputs[0][i] = outputs[1][i] = tempNoise;
+          ProcessNoise1(outputs, i, noiseThreshold);
         }
-        else if (pitch < -5.66 && velocity > 0.0)
+        else if (midiNote < 2 && velocity > 0.0)
         {
-          int clock4 = i / 4;
-          if (clock4 != lastClock4)
-          {
-            lastClock4 = clock4;
-            // Reads current buffer state for threshold calculation
-            double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
-            if (tempNoise < 0.0f)
-              tempNoise = 0.0f;
-            tempNoise4 = tempNoise;
-          }
-          // Applies the sampled noise safely without risky out-of-bounds backwards writing (`i-3`)
-          outputs[0][i] = outputs[1][i] = tempNoise4;
+          ProcessNoise2(outputs, i, noiseThreshold, lastClock4, tempNoise4);
         }
-        else if (pitch < -5.58 && velocity > 0.0)
+        else if (midiNote < 3 && velocity > 0.0)
         {
-          int clock8 = i / 8;
-          if (clock8 != lastClock8)
-          {
-            lastClock8 = clock8;
-            // Reads current buffer state for threshold calculation
-            double tempNoise = outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1;
-            if (tempNoise < 0.0f)
-              tempNoise = 0.0f;
-            tempNoise8 = tempNoise;
-          }
-          // Applies the sampled noise safely without risky out-of-bounds backwards writing (`i-7`)
-          outputs[0][i] = outputs[1][i] = tempNoise8;
+          ProcessNoise3(outputs, i, noiseThreshold, lastClock8, tempNoise8);
+        }
+        else if (midiNote < 4 && velocity > 0.0)
+        {
+          ProcessSampleOscillator(outputs, i, oscFreq, &mSampleOsc);
         }
         else if (velocity > 0.0)
         {
-          bool anyHigh = false;
-
-          for (int u = 0; u < unison; ++u)
-          {
-            double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
-            double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
-
-            auto& uosc = (*arr)[u];
-            uosc.SetPWM(pwmFunc);
-            if (uosc.Process(freq) > 0.0)
-            {
-              anyHigh = true;
-            }
-          }
-
-          double base = anyHigh ? 1.0 : -1.0;
-
-          if (algo == OSC_Algorithm::ALGO_PIN_PULSE)
-          {
-            if (base > 0.0f)
-            {
-              outputs[0][i] = 1.0f;
-              outputs[1][i] = 1.0f;
-            }
-          }
+          ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, velocity, unison, detuneRange, arr);
         }
-
-
       }
     }
 
@@ -343,6 +452,10 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
         o.SetSampleRate(sampleRate);
       for (auto& o : mUnisonOsc4)
         o.SetSampleRate(sampleRate);
+
+      mSampleOsc.SetSampleRate(sampleRate);
+
+
 
       mPitchEnv1.SetSampleRate(sampleRate);
       mPitchEnv2.SetSampleRate(sampleRate);
@@ -366,55 +479,6 @@ void ProcessSamplesAccumulating(T** inputs, T** outputs, int nInputs, int nOutpu
       }
     }
 
-    // Type 1
-    std::array<VaiaOscillator<T>, 8> mUnisonOsc1{};
-    ADSREnvelope<T> mPwmEnv1{};
-    ADSREnvelope<T> mPitchEnv1{};
-
-    // Type 2
-    std::array<VaiaOscillator<T>, 8> mUnisonOsc2{};
-    ADSREnvelope<T> mPwmEnv2{};
-    ADSREnvelope<T> mPitchEnv2{};
-
-    // Type 3
-    std::array<VaiaOscillator<T>, 8> mUnisonOsc3{};
-    ADSREnvelope<T> mPwmEnv3{};
-    ADSREnvelope<T> mPitchEnv3{};
-
-    // Type 4
-    std::array<VaiaOscillator<T>, 8> mUnisonOsc4{};
-    ADSREnvelope<T> mPwmEnv4{};
-    ADSREnvelope<T> mPitchEnv4{};
-    // lightweight debug counter to rate-limit logging inside the voice
-    int mDebugSampleCounter = 0;
-
-
-    std::array<VaiaOscillator<T>*, osc_count> all_oscs{&mUnisonOsc1[0], &mUnisonOsc1[1], &mUnisonOsc1[2], &mUnisonOsc1[3], &mUnisonOsc1[4], &mUnisonOsc1[5], &mUnisonOsc1[6], &mUnisonOsc1[7],
-                                                       &mUnisonOsc2[0], &mUnisonOsc2[1], &mUnisonOsc2[2], &mUnisonOsc2[3], &mUnisonOsc2[4], &mUnisonOsc2[5], &mUnisonOsc2[6], &mUnisonOsc2[7],
-                                                       &mUnisonOsc3[0], &mUnisonOsc3[1], &mUnisonOsc3[2], &mUnisonOsc3[3], &mUnisonOsc3[4], &mUnisonOsc3[5], &mUnisonOsc3[6], &mUnisonOsc3[7],
-                                                       &mUnisonOsc4[0], &mUnisonOsc4[1], &mUnisonOsc4[2], &mUnisonOsc4[3], &mUnisonOsc4[4], &mUnisonOsc4[5], &mUnisonOsc4[6], &mUnisonOsc4[7]};
-    std::array<ADSREnvelope<T>*, env_count> all_envs{&mPwmEnv1, &mPwmEnv2, &mPwmEnv3, &mPwmEnv4, &mPitchEnv1, &mPitchEnv2, &mPitchEnv3, &mPitchEnv4};
-
-
-    std::array<bool, osc_count> pwmKeyTracks{};
-    std::array<double, osc_count> pwmModStrengths{};
-    std::array<double, osc_count> pwmOffsetStrengths{};
-    std::array<double, osc_count> pitchKeyTrackStrengths{};
-    std::array<double, osc_count> pitchModStrengths{};
-    std::array<double, osc_count> pitchOffsetStrengths{};
-
-    // Unison controls per-voice (1..8) and detune in cents (0..100)
-    std::array<int, osc_count> extraUnisonCounts{};
-    std::array<double, osc_count> extraDetuneCents{};
-
-
-    OSC_Algorithm algo = used_algo;
-    WDL_TypedBuf<float> mTimbreBuffer;
-    double mModWheel{0.0};
-
-
-    // noise generator for test
-    uint32_t mRandSeed = 0;
 
     // return single-precision floating point number on [-1, 1]
     float Rand()
@@ -432,7 +496,7 @@ public:
     for (auto i = 0; i < nVoices; i++)
     {
       // add a voice to Zone 0.
-      mSynth.AddVoice(new Voice(), 0);
+      mSynth.AddVoice(new Voice(*this), 0);
     }
   }
 

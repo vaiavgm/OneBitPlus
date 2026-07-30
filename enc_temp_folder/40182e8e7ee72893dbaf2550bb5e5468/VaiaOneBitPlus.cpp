@@ -587,7 +587,7 @@ void VaiaOneBitPlus::ImportSample(const char* filePath)
   auto packed1Bit = SampleTools::ReduceToOneBit(resampled32);
 
   // 3. Send straight to the DSP's sample manager!
-  mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), 44100);
+  mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), 2100);
 }
 
 #endif
