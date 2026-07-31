@@ -333,6 +333,7 @@
     <ClInclude Include="..\src\DeltaSigmaQuantizer.h" />
     <ClInclude Include="..\src\IAudioEffect.h" />
     <ClInclude Include="..\src\IQuantizer.h" />
+    <ClInclude Include="..\src\RawQuantizer.h" />
     <ClInclude Include="..\src\SampleData.h" />
     <ClInclude Include="..\src\SampleLoader.h" />
     <ClInclude Include="..\src\SampleOscillator.h" />

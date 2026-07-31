@@ -417,6 +417,9 @@
     <ClInclude Include="..\src\IQuantizer.h">
       <Filter>src\Quantizers</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\RawQuantizer.h">
+      <Filter>src\Quantizers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IGraphics">
