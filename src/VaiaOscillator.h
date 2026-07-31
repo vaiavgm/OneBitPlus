@@ -5,6 +5,14 @@
 
 #define MY_PRINTF(...) {char buf[512]; sprintf(buf, __VA_ARGS__);  OutputDebugString(buf);}
 
+#define MY_PRINTFLONG(...)                                                                                                                                                                                 \
+  {                                                                                                                                                                                                    \
+    char buf[65536];                                                                                                                                                                                     \
+    sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
+    OutputDebugString(buf);                                                                                                                                                                            \
+  }
+
+
 // #include <windows.h>
 // char debugBuf[32];
 // 

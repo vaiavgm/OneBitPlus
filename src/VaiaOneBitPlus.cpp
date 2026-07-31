@@ -7,19 +7,11 @@
 #include <IGraphicsStructs.h>
 
 #include "src/SampleLoader.h"
-#include "src/SampleTools.h"
 
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
-
- ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav");
-
- ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav");
- ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav");
- ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav");
-
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
@@ -515,11 +507,19 @@ void VaiaOneBitPlus::OnIdle()
 
 void VaiaOneBitPlus::OnReset()
 {
-  mDSP.Reset(GetSampleRate(), GetBlockSize());
+  uint32_t currentSampleRate = static_cast<uint32_t>(GetSampleRate());
 
-  // Ensure DSP has initial parameter values from the host/UI. Some hosts may not
-  // call OnParamChange for defaults on load, so push all current parameter values
-  // into the DSP now.
+  // 1. Reset DSP state and buffer allocations
+  mDSP.Reset(currentSampleRate, GetBlockSize());
+
+  // 2. Only re-resample audio assets if the host SAMPLE RATE actually changed
+  if (currentSampleRate != mLastLoadedSampleRate)
+  {
+    ReloadSamples(currentSampleRate);
+    mLastLoadedSampleRate = currentSampleRate;
+  }
+
+  // 3. Push parameter defaults/states to the DSP
   for (int p = 0; p < kNumParams; ++p)
   {
     mDSP.SetParam(p, GetParam(p)->Value());
@@ -568,38 +568,174 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
 }
 
 
-void VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo)
+void VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
 {
-
   if (!filePath)
     return;
-
 
   SampleLoader loader;
   LoadedSample rawWav = loader.load_file_static(filePath);
   if (rawWav.sampleBuffer.empty())
     return;
 
-  // 1. Resample via pipeline
   auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
 
-  // 2. Reduce to 1-bit packed bytes
+  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
 
-  /*const std::vector<int32_t>& inputBuffer,
-    uint32_t sampleRate = 44100,
-    bool normalize = true,
-    bool applyLPF = true,
-    double cutoffFreq = 16000.0,
-    bool saturate = true,
-    double saturationDrive = 2.0,
-    bool useTrellis = false) // <-- New Parameter
-    */
-
-
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, true, false, 16000.0, true, 16.0, true);
-
-  // 3. Send straight to the DSP's sample manager!
   mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
+}
+
+
+void VaiaOneBitPlus::ExportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
+{
+  if (!filePath)
+    return;
+
+  SampleLoader loader;
+  LoadedSample rawWav = loader.load_file_static(filePath);
+  if (rawWav.sampleBuffer.empty())
+    return;
+
+  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
+
+  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
+
+  mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
+
+  // --- Generate and print C++ array definition ---
+  std::string path(filePath);
+  size_t lastSlash = path.find_last_of("/\\");
+  std::string varName = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
+
+  // Remove extension (everything from the last dot onwards)
+  size_t lastDot = varName.find_last_of('.');
+  if (lastDot != std::string::npos)
+  {
+    varName = varName.substr(0, lastDot);
+  }
+
+  // Sanitize non-alphanumeric characters (e.g., spaces, hyphens) into underscores
+  for (char& c : varName)
+  {
+    if (!std::isalnum(static_cast<unsigned char>(c)))
+    {
+      c = '_';
+    }
+  }
+
+  // C++ variable names cannot start with a digit (e.g. "808Snare" -> "s_808Snare")
+  if (!varName.empty() && std::isdigit(static_cast<unsigned char>(varName[0])))
+  {
+    varName = "s_" + varName;
+  }
+  else if (varName.empty())
+  {
+    varName = "kSample";
+  }
+
+  // Build the array code string
+  std::string code = "inline constexpr int8_t " + varName + "[] = {";
+  for (size_t i = 0; i < packed1Bit.size(); ++i)
+  {
+    char hexBuf[16];
+    // Cast to uint8_t prevents sign-extension printing issues (e.g. 0xFF instead of 0xFFFFFFFF)
+    std::snprintf(hexBuf, sizeof(hexBuf), "0x%02X", static_cast<uint8_t>(packed1Bit[i]));
+    code += hexBuf;
+    if (i + 1 < packed1Bit.size())
+    {
+      code += ", ";
+    }
+  }
+  code += "};";
+
+  // Output to your logging/printing macro
+  MY_PRINTFLONG("%s\n", code.c_str());
+}
+
+
+void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
+{
+  // Clear existing samples in DSP manager
+  mDSP.mSampleManager.ClearDynamicSamples();
+
+  // Create your pipeline as usual
+  AudioPipeline pipeline = CreateDefaultPipeline();
+
+  AudioPipeline snarePipeline;
+  snarePipeline.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
+  snarePipeline.effects.push_back(std::make_shared<SampleRateReductionEffect>(1000));
+  snarePipeline.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline snarePipeline2;
+  snarePipeline2.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline2.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::HighPass, 400, 8));
+  snarePipeline2.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::LowPass, 100, 8));
+  snarePipeline2.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline snarePipeline3;
+  snarePipeline3.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline3.effects.push_back(std::make_shared<LowPassFilterEffect>(8000));
+  snarePipeline3.effects.push_back(std::make_shared<HighPassFilterEffect>(2000));
+  snarePipeline3.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline snarePipeline4;
+  snarePipeline4.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline4.effects.push_back(std::make_shared<ClippingEffect>(0.2, true));
+  snarePipeline4.effects.push_back(std::make_shared<DitherEffect>(0.2));
+  snarePipeline4.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline snarePipeline5;
+  snarePipeline5.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline5.effects.push_back(std::make_shared<ClippingEffect>(0.2, true));
+  snarePipeline5.effects.push_back(std::make_shared<DitherEffect>(0.02));
+  snarePipeline5.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline snarePipeline6;
+  snarePipeline6.effects.push_back(std::make_shared<NormalizeEffect>());
+  snarePipeline6.effects.push_back(std::make_shared<ClippingEffect>(0.4, true));
+  snarePipeline6.effects.push_back(std::make_shared<SampleRateReductionEffect>(1000));
+  snarePipeline6.effects.push_back(std::make_shared<DitherEffect>(0.0));
+  snarePipeline6.quantizer = std::make_shared<TrellisQuantizer>();
+
+
+  
+  AudioPipeline voxP1;
+
+  voxP1.effects.push_back(std::make_shared<NormalizeEffect>());
+  voxP1.effects.push_back(std::make_shared<SaturateEffect>(2.0));
+  //voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::HighPass, 200, 4));
+  //voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::LowPass, 7000, 6));
+
+  voxP1.effects.push_back(std::make_shared<DitherEffect>(0.05));
+  voxP1.quantizer = std::make_shared<TrellisQuantizer>();
+
+  AudioPipeline voxP2;
+  voxP2.effects.push_back(std::make_shared<NormalizeEffect>());
+  voxP2.effects.push_back(std::make_shared<SaturateEffect>(2.0));
+  voxP2.effects.push_back(std::make_shared<DitherEffect>(0.01));
+  voxP2.quantizer = std::make_shared<TrellisQuantizer>();
+
+  /*
+  auto startTime = std::chrono::high_resolution_clock::now();
+  auto endTime = std::chrono::high_resolution_clock::now();
+  auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+  MY_PRINTF("Duration: %lld ms", durationMs);
+  */
+
+  //ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
+
+  //ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, snarePipeline6);
+
+  //ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
+
+  //ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
+
+  ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+  ExportSample("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP2);
+
+
+
 }
 
 #endif

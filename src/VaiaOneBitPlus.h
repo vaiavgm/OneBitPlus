@@ -10,6 +10,9 @@
 #include <IPlugMidi.h>
 #include <ISender.h>
 
+#include "src/SampleTools.h" 
+#include "src/IAudioEffect.h" 
+#include "src/IQuantizer.h"
 
 const int kNumPresets = 1;
 
@@ -192,11 +195,15 @@ public:
   void OnIdle() override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  void ImportSample(const char* filePath, uint32_t targetSampleRate = 44100, ResampleAlgo resampleAlgo = ResampleAlgo::Nearest);
-
+  void ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  void ExportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  void ReloadSamples(uint32_t targetSampleRate);
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;
   ISender<1> mLFOVisSender;
   ISender<1> mOscilloscopeVisSender;
+
+private:
+  uint32_t mLastLoadedSampleRate = 0;
 #endif
 };

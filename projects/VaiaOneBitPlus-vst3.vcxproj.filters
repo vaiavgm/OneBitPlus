@@ -402,8 +402,20 @@
     <ClInclude Include="..\src\SampleLoader.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\IAudioEffect.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
     <ClInclude Include="..\src\SampleTools.h">
-      <Filter>src</Filter>
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\TrellisQuantizer.h">
+      <Filter>src\Quantizers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\DeltaSigmaQuantizer.h">
+      <Filter>src\Quantizers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\IQuantizer.h">
+      <Filter>src\Quantizers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -475,6 +487,12 @@
     </Filter>
     <Filter Include="WDL">
       <UniqueIdentifier>{a5ad8cf3-62c4-4e9f-b5b9-1df3bfa0b546}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\AudioEffects">
+      <UniqueIdentifier>{734f4e92-66f8-4df6-9da4-2cab4a1b0184}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Quantizers">
+      <UniqueIdentifier>{03745eeb-8660-4d2c-9aa4-2d8c79a397af}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
