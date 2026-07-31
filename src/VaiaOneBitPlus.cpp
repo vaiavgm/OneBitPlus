@@ -14,10 +14,10 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
 
-  ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav");
+ ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav");
 
  ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav");
-  ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav");
+ ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav");
  ImportSample("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav");
 
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
@@ -568,7 +568,7 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
 }
 
 
-void VaiaOneBitPlus::ImportSample(const char* filePath)
+void VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo)
 {
 
   if (!filePath)
@@ -581,13 +581,25 @@ void VaiaOneBitPlus::ImportSample(const char* filePath)
     return;
 
   // 1. Resample via pipeline
-  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, 44100, ResampleAlgo::Nearest);
+  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
 
   // 2. Reduce to 1-bit packed bytes
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32);
+
+  /*const std::vector<int32_t>& inputBuffer,
+    uint32_t sampleRate = 44100,
+    bool normalize = true,
+    bool applyLPF = true,
+    double cutoffFreq = 16000.0,
+    bool saturate = true,
+    double saturationDrive = 2.0,
+    bool useTrellis = false) // <-- New Parameter
+    */
+
+
+  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, true, false, 16000.0, true, 16.0, true);
 
   // 3. Send straight to the DSP's sample manager!
-  mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), 44100);
+  mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
 }
 
 #endif

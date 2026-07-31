@@ -192,7 +192,7 @@ public:
   void OnIdle() override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  void ImportSample(const char* filePath);
+  void ImportSample(const char* filePath, uint32_t targetSampleRate = 44100, ResampleAlgo resampleAlgo = ResampleAlgo::Nearest);
 
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;

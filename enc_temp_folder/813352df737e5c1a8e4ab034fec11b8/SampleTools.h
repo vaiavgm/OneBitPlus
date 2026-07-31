@@ -498,7 +498,25 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
     TrellisConfig config = SuggestTrellisConfig(totalBits);
 
 
+    // ================= DEBUG OUTPUT =================
+    constexpr size_t bytesPerNode = 24;
+    size_t totalNodesAllocated = config.useChunking ? (config.chunkSize + 1) * config.numStates : (totalBits + 1) * config.numStates;
 
+    double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
+
+    MY_PRINTF("=== [Trellis Quantizer Debug] ===\n");
+    MY_PRINTF("  Input Samples : %zu (%.2f sec)\n", totalBits, static_cast<double>(totalBits) / sampleRate);
+    MY_PRINTF("  Processing    : %s\n", config.useChunking ? "CHUNKED" : "SINGLE-PASS");
+    MY_PRINTF("  Num States    : %d\n", config.numStates);
+
+    if (config.useChunking)
+    {
+      MY_PRINTF("  Chunk Size    : %zu samples\n", config.chunkSize);
+    }
+
+    MY_PRINTF("  Est. Peak RAM : %.2f MB\n", ramMB);
+    MY_PRINTF("=================================\n");
+    // ================================================
 
     if (config.useChunking)
     {
@@ -541,27 +559,3 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
   return packedBytes;
 }
 }; // namespace SampleTools
-
-
-/*
-    // ================= DEBUG OUTPUT =================
-    constexpr size_t bytesPerNode = 24;
-    size_t totalNodesAllocated = config.useChunking ? (config.chunkSize + 1) * config.numStates : (totalBits + 1) * config.numStates;
-
-    double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
-
-    MY_PRINTF("=== [Trellis Quantizer Debug] ===\n");
-    MY_PRINTF("  Input Samples : %zu (%.2f sec)\n", totalBits, static_cast<double>(totalBits) / sampleRate);
-    MY_PRINTF("  Processing    : %s\n", config.useChunking ? "CHUNKED" : "SINGLE-PASS");
-    MY_PRINTF("  Num States    : %d\n", config.numStates);
-
-    if (config.useChunking)
-    {
-      MY_PRINTF("  Chunk Size    : %zu samples\n", config.chunkSize);
-    }
-
-    MY_PRINTF("  Est. Peak RAM : %.2f MB\n", ramMB);
-    MY_PRINTF("=================================\n");
-    // ================================================
-
-*/
