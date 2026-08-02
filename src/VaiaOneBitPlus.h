@@ -13,6 +13,7 @@
 #include "src/SampleTools.h" 
 #include "src/IAudioEffect.h" 
 #include "src/IQuantizer.h"
+#include "src/DragDropWaveformDisplay.h"
 
 const int kNumPresets = 1;
 
@@ -195,13 +196,14 @@ public:
   void OnIdle() override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  void ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
-  void ExportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
   void ReloadSamples(uint32_t targetSampleRate);
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;
   ISender<1> mLFOVisSender;
   ISender<1> mOscilloscopeVisSender;
+  DragDropWaveformDisplay* mDropBox = nullptr;
 
 private:
   uint32_t mLastLoadedSampleRate = 0;

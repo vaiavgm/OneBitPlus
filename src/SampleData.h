@@ -81,9 +81,16 @@ public:
   static constexpr auto kStaticVelocityLUT = GenerateVelocityLUT<kPreparedSamples.size()>();
 
   // Add packed dynamic samples
-  void AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100) { mDynamicSlots.push_back(DynamicSlot{std::vector<int8_t>(data, data + size), sampleRate}); }
+  int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100) { mDynamicSlots.push_back(DynamicSlot{std::vector<int8_t>(data, data + size), sampleRate}); return mDynamicSlots.size() - 1; }
 
   void ClearDynamicSamples() { mDynamicSlots.clear(); }
+
+  std::vector<int8_t> GetDynamicSampleData(int index) const
+  {
+    if (index < 0 || index >= static_cast<int>(mDynamicSlots.size()))
+      return {};
+    return mDynamicSlots[index].data;
+  }
 
   // Ultra-fast velocity lookup
   SampleInfo GetSampleForVelocity(double level) const

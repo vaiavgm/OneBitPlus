@@ -420,6 +420,9 @@
     <ClInclude Include="..\src\RawQuantizer.h">
       <Filter>src\Quantizers</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\DragDropWaveformDisplay.h">
+      <Filter>src\GUI</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IGraphics">
@@ -496,6 +499,9 @@
     </Filter>
     <Filter Include="src\Quantizers">
       <UniqueIdentifier>{03745eeb-8660-4d2c-9aa4-2d8c79a397af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\GUI">
+      <UniqueIdentifier>{f5aa3213-2800-4fa2-a117-5fd6573b12e6}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

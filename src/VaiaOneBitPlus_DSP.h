@@ -206,7 +206,7 @@ public:
     bool GetBusy() const override
     {
 
-      return mPwmEnv1.GetBusy();
+      return mPwmEnv1.GetBusy();//      || mSampleOsc.IsPlaying();
 
     }
 
@@ -311,8 +311,8 @@ inline void ProcessSampleOscillator(T** outputs, int i, double oscFreq, SampleOs
 
         if (outputVal < 0.1f)
         {
-          outputs[0][i] = sampleVal || outputVal;
-          outputs[1][i] = sampleVal || outputVal;
+          outputs[0][i] = std::max(outputs[0][i], sampleVal);
+          outputs[1][i] = std::max(outputs[1][i], sampleVal);
         }
       }
     }
