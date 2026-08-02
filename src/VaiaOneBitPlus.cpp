@@ -660,9 +660,8 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
 #endif
 }
-
-
 #if IPLUG_DSP
+
 void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames)
 {
   memset(outputs[0], 0, nFrames * sizeof(sample));
@@ -731,7 +730,6 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
   return false;
 }
 
-
 int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
 {
   if (!filePath)
@@ -743,12 +741,10 @@ int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate
     return -1;
 
   auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
-
   auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
 
   return mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
 }
-
 
 int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
 {
@@ -818,7 +814,6 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   return sampleIdx;
 }
 
-
 void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
 {
   // Clear existing samples in DSP manager
@@ -864,15 +859,9 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   snarePipeline6.effects.push_back(std::make_shared<DitherEffect>(0.0));
   snarePipeline6.quantizer = std::make_shared<TrellisQuantizer>();
 
-
   AudioPipeline voxP1;
 
   voxP1.effects.push_back(std::make_shared<NormalizeEffect>());
-  // voxP1.effects.push_back(std::make_shared<SaturateEffect>(10.0));
-  // voxP1.effects.push_back(std::make_shared<ClippingEffect>(0.5, true));
-  // voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::HighPass, 200, 4));
-  // voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::LowPass, 7000, 6));
-  // voxP1.effects.push_back(std::make_shared<ClippingEffect>(0.3, true));
   voxP1.effects.push_back(std::make_shared<DitherEffect>(0.1));
   voxP1.quantizer = std::make_shared<TrellisQuantizer>();
 
@@ -882,23 +871,6 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   voxP2.effects.push_back(std::make_shared<DitherEffect>(0.01));
   voxP2.quantizer = std::make_shared<TrellisQuantizer>();
 
-  /*
-  auto startTime = std::chrono::high_resolution_clock::now();
-  auto endTime = std::chrono::high_resolution_clock::now();
-  auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-  MY_PRINTF("Duration: %lld ms", durationMs);
-  */
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, snarePipeline6);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP2);
   ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
   ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
   ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\SineBlip.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
