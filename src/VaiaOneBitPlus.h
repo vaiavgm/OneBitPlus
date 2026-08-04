@@ -14,6 +14,7 @@
 #include "src/IAudioEffect.h" 
 #include "src/IQuantizer.h"
 #include "src/DragDropWaveformDisplay.h"
+#include <string.h>
 
 const int kNumPresets = 1;
 
@@ -198,12 +199,16 @@ public:
 
   int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
   int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
+
   void ReloadSamples(uint32_t targetSampleRate);
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;
   ISender<1> mLFOVisSender;
   ISender<1> mOscilloscopeVisSender;
   DragDropWaveformDisplay* mDropBox = nullptr;
+
+  char* kMyString = "Hello, World!";
 
 private:
   uint32_t mLastLoadedSampleRate = 0;

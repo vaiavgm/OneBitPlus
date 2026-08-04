@@ -4,6 +4,7 @@
 #include <random>
 #include "src/TrellisQuantizer.h"
 #include "src/DeltaSigmaQuantizer.h"
+#include "src/RawQuantizer.h"
 
 #define MY_PRINTF(...)                                                                                                                                                                                 \
   {                                                                                                                                                                                                    \
@@ -62,6 +63,48 @@ public:
   }
 };
 
+
+class TrimEffect : public IAudioEffect
+{
+private:
+  double m_startFromMs;
+  double m_lengthMs;
+
+public:
+  TrimEffect(double startFromMs, double lengthMs)
+    : m_startFromMs(startFromMs)
+    , m_lengthMs(lengthMs)
+  {
+  }
+
+  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  {
+    if (buffer.empty())
+      return;
+
+    // Convert milliseconds to number of samples
+    double samplesPerMs = static_cast<double>(sampleRate) / 1000.0;
+    size_t startSample = static_cast<size_t>(m_startFromMs * samplesPerMs);
+    size_t lengthSamples = static_cast<size_t>(m_lengthMs * samplesPerMs);
+
+    // If start position is out of bounds, clear the buffer and return
+    if (startSample >= buffer.size())
+    {
+      buffer.clear();
+      return;
+    }
+
+    // Ensure we do not read past the end of the original buffer
+    if (startSample + lengthSamples > buffer.size())
+    {
+      lengthSamples = buffer.size() - startSample;
+    }
+
+    // Efficiently slice the vector to the new trimmed range
+    auto startIt = buffer.begin() + startSample;
+    buffer.assign(startIt, startIt + lengthSamples);
+  }
+};
 
 
 // --- 1. Normalization Effect ---

@@ -341,6 +341,116 @@ inline static void ApplyTrellisQuantization(const std::vector<double>& input, st
   }
 }
 
+inline static void ApplyPsychoacousticTrellis(const std::vector<double>& input, std::vector<bool>& outputBits, int numStates = 65)
+{
+  const double state_min = -3.0; // Widened slightly to account for filter gain amplification
+  const double state_max = 3.0;
+  const double infinity = std::numeric_limits<double>::max();
+  const size_t chunk_size = 32; // Reduced to 32! Trellis only needs a tiny lookahead now.
+
+  // 3rd-order psychoacoustic weights
+  static constexpr double C1 = 2.033;
+  static constexpr double C2 = -1.411;
+  static constexpr double C3 = 0.354;
+
+  auto get_state_index = [&](double state) -> int {
+    double normalized = (state - state_min) / (state_max - state_min);
+    int idx = static_cast<int>(normalized * (numStates - 1));
+    return std::max(0, std::min(idx, numStates - 1));
+  };
+
+  struct Node
+  {
+    double cost;
+    int prev_idx;
+    bool bit;
+
+    // Crucial change: Every state track carries its own historical memory lines
+    double e1, e2, e3;
+  };
+
+  // Seed history globally across chunk boundaries
+  double g_e1 = 0.0, g_e2 = 0.0, g_e3 = 0.0;
+
+  for (size_t offset = 0; offset < input.size(); offset += chunk_size)
+  {
+    size_t current_chunk = std::min(chunk_size, input.size() - offset);
+    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, -1, false, 0.0, 0.0, 0.0}));
+
+    // Initialize with historical filters carried from the previous chunk
+    int start_idx = get_state_index(g_e1);
+    trellis[0][start_idx] = {0.0, -1, false, g_e1, g_e2, g_e3};
+
+    for (size_t t = 0; t < current_chunk; ++t)
+    {
+      double x = input[offset + t];
+
+      for (int s = 0; s < numStates; ++s)
+      {
+        if (trellis[t][s].cost == infinity)
+          continue;
+
+        // Pull the specific history matching this trellis path node
+        double he1 = trellis[t][s].e1;
+        double he2 = trellis[t][s].e2;
+        double he3 = trellis[t][s].e3;
+
+        // Compute psychoacoustic filter prediction for this step
+        double noise_prediction = (C1 * he1) + (C2 * he2) + (C3 * he3);
+        double corrected_input = x + noise_prediction;
+
+        for (int b = 0; b < 2; ++b)
+        {
+          bool bit_val = (b == 1);
+          double y = bit_val ? 1.0 : -1.0;
+
+          double current_error = corrected_input - y;
+
+          // Perceptual Cost Function:
+          // We don't just measure raw error anymore. We minimize the filtered,
+          // weighted error that human ears can actually hear.
+          double step_cost = current_error * current_error;
+          double total_cost = trellis[t][s].cost + step_cost;
+
+          // Determine the next trellis row based on the primary error register (e1)
+          int next_s = get_state_index(current_error);
+
+          if (total_cost < trellis[t + 1][next_s].cost)
+          {
+            // Update node and slide the error delay-line history forward
+            trellis[t + 1][next_s] = {total_cost, s, bit_val, current_error, he1, he2};
+          }
+        }
+      }
+    }
+
+    // Find best final state
+    int best_state = 0;
+    double min_cost = infinity;
+    for (int s = 0; s < numStates; ++s)
+    {
+      if (trellis[current_chunk][s].cost < min_cost)
+      {
+        min_cost = trellis[current_chunk][s].cost;
+        best_state = s;
+      }
+    }
+
+    // Save history registers globally for the next block chunk
+    g_e1 = trellis[current_chunk][best_state].e1;
+    g_e2 = trellis[current_chunk][best_state].e2;
+    g_e3 = trellis[current_chunk][best_state].e3;
+
+    // Traceback
+    int curr_s = best_state;
+    for (int t = current_chunk; t > 0; --t)
+    {
+      outputBits[offset + t - 1] = trellis[t][curr_s].bit;
+      curr_s = trellis[t][curr_s].prev_idx;
+    }
+  }
+}
+
 // --- 5. Trellis Quantizer Effect ---
 class TrellisQuantizer : public IQuantizer
 {
@@ -388,7 +498,8 @@ public:
     }
     else
     {
-      ApplyTrellisQuantizationSinglePass(input, outBits, config.numStates);
+      // ApplyTrellisQuantizationSinglePass(input, outBits, config.numStates);
+      ApplyPsychoacousticTrellis(input, outBits, config.numStates);
     }
 
     return outBits;

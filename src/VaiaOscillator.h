@@ -7,7 +7,7 @@
 
 #define MY_PRINTFLONG(...)                                                                                                                                                                                 \
   {                                                                                                                                                                                                    \
-    char buf[65536];                                                                                                                                                                                     \
+    char buf[65536*2];                                                                                                                                                                                     \
     sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
     OutputDebugString(buf);                                                                                                                                                                            \
   }

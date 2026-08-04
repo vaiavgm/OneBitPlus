@@ -1,4 +1,5 @@
 #pragma once
+#pragma warning(disable : 4309)
 
 #include <algorithm>
 #include <array>
@@ -15,6 +16,8 @@ inline constexpr int8_t kType3[] = {0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x
 inline constexpr int8_t kType4[] = {0xFF, 0x00, 0xFF, 0x00, 0xE7, 0x18, 0xE7, 0x18, 0xBD, 0x42, 0xBD, 0x42, 0x7E, 0x81};
 inline constexpr int8_t kType5[] = {
   0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xF0, 0x00, 0xFC, 0xF0, 0xC0, 0x00, 0xF8, 0xE0, 0x80, 0x00, 0xF0, 0xC0, 0x00, 0x00, 0xE0, 0x80, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00};
+
+
 inline constexpr int8_t kSilence[] = {0x00};
 
 // --- 2. Lightweight Sample Pointer View ---
@@ -40,6 +43,7 @@ struct SampleInfo
     : data(pData)
     , size(numBytes)
     , sampleRate(sr)
+    
   {
   }
 };
@@ -76,6 +80,11 @@ public:
   // Static prepared sample array evaluated entirely at compile time
   // static constexpr std::array<SampleInfo, 5> kPreparedSamples = {SampleInfo(kType1), SampleInfo(kType2), SampleInfo(kType3), SampleInfo(kType4), SampleInfo(kType5)};
   static constexpr std::array<SampleInfo, 0> kPreparedSamples = {};
+
+  // static constexpr std::array<SampleInfo, 3> kPreparedSamples = {SampleInfo(HR16_Crash02), SampleInfo(XIL_snare_9), SampleInfo(XIL_kick_6)};
+
+
+
 
   // Static precomputed velocity lookup table
   static constexpr auto kStaticVelocityLUT = GenerateVelocityLUT<kPreparedSamples.size()>();

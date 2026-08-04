@@ -221,9 +221,11 @@ public:
       for (auto& o : mUnisonOsc4)
         o.Reset();
 
+      
       mSampleOsc.Reset();
       auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
       mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);
+      
 
 
 

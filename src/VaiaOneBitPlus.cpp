@@ -617,13 +617,16 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(
       IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune4, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
+    IEditableTextControl* pEditableTextControl = new IEditableTextControl(IRECT(25, 700, 100, 725), kMyString);
+    pGraphics->AttachControl(pEditableTextControl);
 
-    IRECT dropBoxRect(50.0f, 50.0f, 450.0f, 200.0f);
+
+    IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
 
     mDropBox = new DragDropWaveformDisplay(
       dropBoxRect,
       // --- 1. THE DROP CALLBACK ---
-      [this](const char* filePath) {
+      [this, pEditableTextControl](const char* filePath) {
         if (!filePath)
           return;
 
@@ -636,9 +639,11 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         p1.effects.push_back(std::make_shared<DitherEffect>(0.1));
         p1.quantizer = std::make_shared<TrellisQuantizer>();
 
-        int sampleIndex = ImportSample(filePath, targetSampleRate, resampleAlgo, p1);
+        int sampleIndex = ImportSampleAndPrintBits(filePath, targetSampleRate, resampleAlgo, p1);
         std::vector<int8_t> sampleData = mDSP.mSampleManager.GetDynamicSampleData(sampleIndex);
         mDropBox->SetWaveformData(sampleData);
+        kMyString = const_cast<char*>(PrintBits(filePath, sampleData).c_str());
+        pEditableTextControl->SetDirty(true);
       },
 
       // --- 2. MOUSE DOWN (Note On) ---
@@ -766,7 +771,16 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
 
   int sampleIdx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
 
-  // --- Generate and print C++ array definition ---
+  PrintBits(filePath, packed1Bit);
+
+}
+
+
+
+
+std::string VaiaOneBitPlus::PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit)
+{
+  // --- Generate C++ array definition ---
   std::string path(filePath);
   size_t lastSlash = path.find_last_of("/\\");
   std::string varName = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
@@ -802,7 +816,7 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   for (size_t i = 0; i < packed1Bit.size(); ++i)
   {
     char hexBuf[16];
-    // Cast to uint8_t prevents sign-extension printing issues (e.g. 0xFF instead of 0xFFFFFFFF)
+    // Cast to uint8_t prevents sign-extension printing issues
     std::snprintf(hexBuf, sizeof(hexBuf), "0x%02X", static_cast<uint8_t>(packed1Bit[i]));
     code += hexBuf;
     if (i + 1 < packed1Bit.size())
@@ -812,10 +826,8 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   }
   code += "};";
 
-  // Output to your logging/printing macro
   MY_PRINTFLONG("%s\n", code.c_str());
-
-  return sampleIdx;
+  return code;
 }
 
 
@@ -829,8 +841,8 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
 
   AudioPipeline snarePipeline;
   snarePipeline.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
-  snarePipeline.effects.push_back(std::make_shared<SampleRateReductionEffect>(1000));
+  snarePipeline.effects.push_back(std::make_shared<SaturateEffect>(4.0));
+  snarePipeline.effects.push_back(std::make_shared<SampleRateReductionEffect>(8000));
   snarePipeline.quantizer = std::make_shared<TrellisQuantizer>();
 
   AudioPipeline snarePipeline2;
@@ -891,17 +903,41 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
 
   // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
 
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, snarePipeline6);
+  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, snarePipeline);
 
   // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
 
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_2.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
 
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+  AudioPipeline kickPipeline;
+  kickPipeline.effects.push_back(std::make_shared<NormalizeEffect>());
+  kickPipeline.effects.push_back(std::make_shared<ClippingEffect>(0.8, true));
+  //kickPipeline.effects.push_back(std::make_shared<LowPassFilterEffect>(10000.0));
+  kickPipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
+  kickPipeline.effects.push_back(std::make_shared<DitherEffect>(0.015));
+  kickPipeline.quantizer = std::make_shared<TrellisQuantizer>();
+
+
+  AudioPipeline kickPipeline2;
+ // kickPipeline2.effects.push_back(std::make_shared<TrimEffect>(0, 235));
+  kickPipeline2.effects.push_back(std::make_shared<NormalizeEffect>());
+  kickPipeline2.effects.push_back(std::make_shared<SaturateEffect>(3.0));
+  kickPipeline2.effects.push_back(std::make_shared<GainEffect>(GainEffect::FromDecibels(6.0)));
+  //kickPipeline2.effects.push_back(std::make_shared<DitherEffect>(0.015));
+  kickPipeline2.quantizer = std::make_shared<TrellisQuantizer>();
+
+  ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_6.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
+
+
+  ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
+
+
+
+    kickPipeline2.quantizer = std::make_shared<DeltaSigmaQuantizer>();
+    ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
   // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP2);
-  ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
-  ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
-  ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\SineBlip.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+  //ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+  //ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+ // ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\SineBlip.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
 }
 
 #endif
