@@ -2,6 +2,9 @@
 #include <vector>
 #include <memory>
 #include <random>
+#include <string>
+#include <cstdio>
+#include <cstdint>
 #include "src/TrellisQuantizer.h"
 #include "src/DeltaSigmaQuantizer.h"
 #include "src/RawQuantizer.h"
@@ -17,9 +20,12 @@
 class IAudioEffect {
 public:
     virtual ~IAudioEffect() = default;
-    
+
     // Process audio buffer in-place (normalized [-1.0, 1.0] range)
     virtual void Process(std::vector<double>& buffer, uint32_t sampleRate) = 0;
+
+    // Human readable description of the effect and its parameters
+    virtual std::string ToString() const { return "IAudioEffect"; }
 };
 
 
@@ -61,6 +67,7 @@ public:
       sample = std::clamp(sample, -1.0, 1.0);
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "GainEffect(%g)", m_gain); return std::string(buf); }
 };
 
 
@@ -104,6 +111,7 @@ public:
     auto startIt = buffer.begin() + startSample;
     buffer.assign(startIt, startIt + lengthSamples);
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "TrimEffect(startMs=%g,lengthMs=%g)", m_startFromMs, m_lengthMs); return std::string(buf); }
 };
 
 
@@ -131,6 +139,7 @@ public:
       }
     }
   }
+  std::string ToString() const override { return std::string("NormalizeEffect"); }
 };
 
 
@@ -166,6 +175,7 @@ public:
       val = prevOutput;
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "LowPassFilterEffect(%g)", m_cutoffFreq); return std::string(buf); }
 };
 
 
@@ -204,6 +214,7 @@ public:
       val = input - lpfOutput;
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "HighPassFilterEffect(%g)", m_cutoffFreq); return std::string(buf); }
 };
 
 class BiquadFilterEffect : public IAudioEffect
@@ -314,6 +325,7 @@ public:
       sample = stageInput;
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "BiquadFilterEffect(%s,%g,order=%u,Q=%g)", m_type==FilterType::LowPass?"LowPass":"HighPass", m_cutoffFreq, (unsigned)m_order, m_Q); return std::string(buf); }
 };
 
 
@@ -340,6 +352,7 @@ public:
       sample = std::tanh(sample * m_drive);
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "SaturateEffect(%g)", m_drive); return std::string(buf); }
 };
 
 class ClippingEffect : public IAudioEffect
@@ -385,6 +398,7 @@ public:
       }
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "ClippingEffect(%g,%s)", m_threshold, m_normalizeAfter?"true":"false"); return std::string(buf); }
 };
 
 class SampleRateReductionEffect : public IAudioEffect
@@ -426,6 +440,7 @@ public:
       s = heldSample;
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "SampleRateReductionEffect(%g)", m_targetSampleRate); return std::string(buf); }
 };
 
 class DitherEffect : public IAudioEffect
@@ -458,6 +473,7 @@ public:
       sample += noise;
     }
   }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "DitherEffect(%g)", m_ditherScale); return std::string(buf); }
 };
 
 
@@ -478,6 +494,19 @@ struct AudioPipeline
   {
     quantizer = q;
     return *this;
+  }
+
+  std::string ToString() const
+  {
+    std::string out;
+    for (size_t i = 0; i < effects.size(); ++i)
+    {
+      if (i) out += "->";
+      if (effects[i]) out += effects[i]->ToString();
+    }
+    if (!out.empty()) out += "->";
+    if (quantizer) out += quantizer->ToString();
+    return out;
   }
 };
 

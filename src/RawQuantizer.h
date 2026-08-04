@@ -22,4 +22,5 @@ public:
 
     return outBits;
   }
+  std::string ToString() const { return std::string("RawQuantizer"); }
 };

@@ -620,6 +620,11 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     IEditableTextControl* pEditableTextControl = new IEditableTextControl(IRECT(25, 700, 100, 725), kMyString);
     pGraphics->AttachControl(pEditableTextControl);
 
+    // Sample paths list (display imported sample file paths)
+    mSamplePathsText = "";
+    mSampleListControl = new IEditableTextControl(IRECT(340.0f, 500.0f, 900.0f, 650.0f), const_cast<char*>(mSamplePathsText.c_str()));
+    pGraphics->AttachControl(mSampleListControl);
+
 
     IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
 
@@ -664,6 +669,120 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   };
 
 #endif
+}
+
+bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
+{
+  // Serialize parameters first (consistent with other plugins)
+  bool ok = SerializeParams(chunk);
+
+  // Simple versioned binary block for dynamic samples
+  uint32_t version = 1;
+  chunk.Put(&version);
+
+  uint32_t numSlots = static_cast<uint32_t>(mDSP.mSampleManager.DynamicCount());
+  chunk.Put(&numSlots);
+
+  for (uint32_t i = 0; i < numSlots; ++i)
+  {
+    uint32_t sr = mDSP.mSampleManager.GetDynamicSampleRate(i);
+    auto data = mDSP.mSampleManager.GetDynamicSampleData(static_cast<int>(i));
+    uint32_t dataSize = static_cast<uint32_t>(data.size());
+
+    chunk.Put(&sr);
+    chunk.Put(&dataSize);
+    if (dataSize)
+      chunk.PutBytes(data.data(), static_cast<int>(dataSize));
+  }
+
+  // Persist file paths for UI using PutStr
+  uint32_t pathCount = static_cast<uint32_t>(mSamplePaths.size());
+  chunk.Put(&pathCount);
+  // For each sample persist path and the pipeline string (if any)
+  for (size_t i = 0; i < mSamplePaths.size(); ++i)
+  {
+    WDL_String s;
+    s.Set(mSamplePaths[i].c_str());
+    chunk.PutStr(s.Get());
+
+    WDL_String pl;
+    if (i < mSamplePipelines.size()) pl.Set(mSamplePipelines[i].c_str());
+    else pl.Set("\0");
+    chunk.PutStr(pl.Get());
+  }
+
+  return ok;
+}
+
+int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
+{
+  // Restore parameters first
+  int pos = UnserializeParams(chunk, startPos);
+
+  // Read version
+  uint32_t version = 0;
+  pos = chunk.Get(&version, pos);
+
+  if (version != 1)
+  {
+    return pos;
+  }
+
+  // Read dynamic samples
+  uint32_t numSlots = 0;
+  pos = chunk.Get(&numSlots, pos);
+
+  mDSP.mSampleManager.ClearDynamicSamples();
+  mSamplePaths.clear();
+  mSamplePipelines.clear();
+  mSamplePathsText.clear();
+
+  for (uint32_t i = 0; i < numSlots; ++i)
+  {
+    uint32_t sr = 0;
+    pos = chunk.Get(&sr, pos);
+
+    uint32_t dataSize = 0;
+    pos = chunk.Get(&dataSize, pos);
+
+    std::vector<int8_t> data;
+    if (dataSize)
+    {
+      data.resize(dataSize);
+      pos = chunk.GetBytes(data.data(), static_cast<int>(dataSize), pos);
+    }
+
+    if (!data.empty())
+    {
+      mDSP.mSampleManager.AddSample(data.data(), data.size(), sr);
+    }
+  }
+
+  // Read persisted paths and pipelines
+  uint32_t pathCount = 0;
+  pos = chunk.Get(&pathCount, pos);
+  for (uint32_t i = 0; i < pathCount; ++i)
+  {
+    WDL_String ws;
+    pos = chunk.GetStr(ws, pos);
+    mSamplePaths.emplace_back(ws.Get());
+
+    WDL_String wpl;
+    pos = chunk.GetStr(wpl, pos);
+    mSamplePipelines.emplace_back(wpl.Get());
+
+    if (!mSamplePathsText.empty())
+      mSamplePathsText += "\n";
+
+    mSamplePathsText += ws.Get();
+    if (wpl.Get() && wpl.Get()[0] != '\0')
+    {
+      mSamplePathsText += " -> ";
+      mSamplePathsText += wpl.Get();
+    }
+  }
+
+  return pos;
 }
 
 
@@ -751,7 +870,31 @@ int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate
 
   auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
 
-  return mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
+  int idx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
+  if (idx >= 0)
+  {
+    // store path for UI
+    mSamplePaths.emplace_back(filePath);
+    mSamplePipelines.emplace_back(pipeline.ToString());
+    // update backing text and refresh control
+    if (!mSamplePathsText.empty())
+      mSamplePathsText += "\n";
+    mSamplePathsText += filePath;
+    // show pipeline after path
+    if (!mSamplePipelines.empty())
+    {
+      const auto& pl = mSamplePipelines.back();
+      if (!pl.empty())
+      {
+        mSamplePathsText += " -> ";
+        mSamplePathsText += pl;
+      }
+    }
+    if (mSampleListControl)
+      mSampleListControl->SetDirty(true);
+  }
+
+  return idx;
 }
 
 
@@ -770,6 +913,27 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
 
   int sampleIdx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
+  if (sampleIdx >= 0)
+  {
+    mSamplePaths.emplace_back(filePath);
+    mSamplePipelines.emplace_back(pipeline.ToString());
+    // update backing text and refresh control
+    if (!mSamplePathsText.empty())
+      mSamplePathsText += "\n";
+    mSamplePathsText += filePath;
+    // show pipeline after path
+    if (!mSamplePipelines.empty())
+    {
+      const auto& pl = mSamplePipelines.back();
+      if (!pl.empty())
+      {
+        mSamplePathsText += " -> ";
+        mSamplePathsText += pl;
+      }
+    }
+    if (mSampleListControl)
+      mSampleListControl->SetDirty(true);
+  }
 
   PrintBits(filePath, packed1Bit);
 
@@ -835,6 +999,10 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
 {
   // Clear existing samples in DSP manager
   mDSP.mSampleManager.ClearDynamicSamples();
+  // Also clear recorded paths when reloading base factory samples
+  mSamplePaths.clear();
+  mSamplePipelines.clear();
+  mSamplePathsText.clear();
 
   // Create your pipeline as usual
   AudioPipeline pipeline = CreateDefaultPipeline();
@@ -925,15 +1093,15 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   //kickPipeline2.effects.push_back(std::make_shared<DitherEffect>(0.015));
   kickPipeline2.quantizer = std::make_shared<TrellisQuantizer>();
 
-  ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_6.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
+  //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_6.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
 
 
-  ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
+  //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
 
 
 
     kickPipeline2.quantizer = std::make_shared<DeltaSigmaQuantizer>();
-    ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
+    //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
   // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP2);
   //ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
   //ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);

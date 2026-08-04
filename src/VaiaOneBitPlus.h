@@ -195,6 +195,8 @@ public:
   void OnReset() override;
   void OnParamChange(int paramIdx) override;
   void OnIdle() override;
+  bool SerializeState(IByteChunk& chunk) const override;
+  int UnserializeState(const IByteChunk& chunk, int startPos) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
   int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
@@ -209,6 +211,13 @@ public:
   DragDropWaveformDisplay* mDropBox = nullptr;
 
   char* kMyString = "Hello, World!";
+  // Keep file paths of imported samples for GUI display and persistence
+  std::vector<std::string> mSamplePaths;
+  // Persist the pipeline string used to process each sample
+  std::vector<std::string> mSamplePipelines;
+  // Backing text for the sample paths display
+  std::string mSamplePathsText;
+  IEditableTextControl* mSampleListControl = nullptr;
 
 private:
   uint32_t mLastLoadedSampleRate = 0;

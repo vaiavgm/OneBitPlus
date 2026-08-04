@@ -60,37 +60,47 @@ private:
 
   std::vector<DynamicSlot> mDynamicSlots;
 
-  // Compile-time Generator for 128-velocity Index Mapping
-  template <size_t NumSlots>
-  static constexpr std::array<uint8_t, 128> GenerateVelocityLUT()
-  {
-    std::array<uint8_t, 128> lut{};
-    if (NumSlots == 0)
-      return lut;
+  // expose a few accessors for persistence / UI
 
-    for (int vel = 0; vel < 128; ++vel)
-    {
-      size_t idx = (static_cast<size_t>(vel) * NumSlots) / 128;
-      lut[vel] = static_cast<uint8_t>(std::min(idx, NumSlots - 1));
-    }
-    return lut;
-  }
+
+
+  // Total number of velocity slots (one per MIDI velocity 0-127)
+  static constexpr size_t kTotalSlots = 128;
 
 public:
+  size_t DynamicCount() const { return mDynamicSlots.size(); }
+
+  uint32_t GetDynamicSampleRate(size_t idx) const
+  {
+    if (idx >= mDynamicSlots.size())
+      return 0;
+    return mDynamicSlots[idx].sampleRate;
+  }
   // Static prepared sample array evaluated entirely at compile time
+  // A few slots can be reserved at compile time. The rest of the 128 velocity slots
+  // map to dynamic samples stored in mDynamicSlots.
+  // Example: uncomment and adjust to reserve prepared slots:
   // static constexpr std::array<SampleInfo, 5> kPreparedSamples = {SampleInfo(kType1), SampleInfo(kType2), SampleInfo(kType3), SampleInfo(kType4), SampleInfo(kType5)};
   static constexpr std::array<SampleInfo, 0> kPreparedSamples = {};
+
+  static constexpr size_t kPreparedCount = kPreparedSamples.size();
 
   // static constexpr std::array<SampleInfo, 3> kPreparedSamples = {SampleInfo(HR16_Crash02), SampleInfo(XIL_snare_9), SampleInfo(XIL_kick_6)};
 
 
 
 
-  // Static precomputed velocity lookup table
-  static constexpr auto kStaticVelocityLUT = GenerateVelocityLUT<kPreparedSamples.size()>();
-
-  // Add packed dynamic samples
-  int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100) { mDynamicSlots.push_back(DynamicSlot{std::vector<int8_t>(data, data + size), sampleRate}); return mDynamicSlots.size() - 1; }
+  // Add packed dynamic samples. Dynamic slots occupy the remaining velocity slots
+  // after the prepared slots. Returns the dynamic index on success, or -1 if
+  // there is no remaining slot available (max kTotalSlots - kPreparedCount).
+  int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100)
+  {
+    const size_t maxDynamic = kTotalSlots - kPreparedCount;
+    if (mDynamicSlots.size() >= maxDynamic)
+      return -1;
+    mDynamicSlots.push_back(DynamicSlot{std::vector<int8_t>(data, data + size), sampleRate});
+    return static_cast<int>(mDynamicSlots.size() - 1);
+  }
 
   void ClearDynamicSamples() { mDynamicSlots.clear(); }
 
@@ -104,32 +114,27 @@ public:
   // Ultra-fast velocity lookup
   SampleInfo GetSampleForVelocity(double level) const
   {
-    int velInt = std::clamp(static_cast<int>(level * 127.0 + 0.5), 0, 127);
+    // Map normalized level [0..1] to MIDI velocities 1..127 (no velocity 0).
+    // Use level*127 + 0.5 to round to the nearest integer velocity, then clamp to [1,127].
+    int velInt = std::clamp(static_cast<int>(level * 127.0 + 0.5), 1, 127);
 
-    // --- PATH A: Static-Only Fast Path (Pure O(1) Precomputed LUT) ---
-    if (mDynamicSlots.empty())
+    // Map velocity directly to a stable slot index.
+    // Velocities 1..kPreparedCount map to prepared static samples (index = vel-1).
+    // Velocities (kPreparedCount+1)..127 map to dynamic slots at index (vel - kPreparedCount - 1).
+
+    if (velInt <= static_cast<int>(kPreparedCount))
     {
-      uint8_t index = kStaticVelocityLUT[velInt];
-      return kPreparedSamples[index];
+      return kPreparedSamples[velInt - 1];
     }
 
-    // --- PATH B: Hybrid Path for Dynamic Slots ---
-    size_t totalSlots = kPreparedSamples.size() + mDynamicSlots.size();
-    size_t index = (static_cast<size_t>(velInt) * totalSlots) >> 7; // Fast division by 128
-    index = std::min(index, totalSlots - 1);
-
-    if (index < kPreparedSamples.size())
-    {
-      return kPreparedSamples[index];
-    }
-
-    size_t dynamicIdx = index - kPreparedSamples.size();
-    if (!mDynamicSlots[dynamicIdx].data.empty())
+    size_t dynamicIdx = static_cast<size_t>(velInt) - kPreparedCount - 1;
+    if (dynamicIdx < mDynamicSlots.size() && !mDynamicSlots[dynamicIdx].data.empty())
     {
       const auto& slot = mDynamicSlots[dynamicIdx];
       return SampleInfo(slot.data.data(), slot.data.size(), slot.sampleRate);
     }
 
+    // Requested velocity maps to an uninitialized slot -> silence
     return SampleInfo(kSilence);
   }
 };

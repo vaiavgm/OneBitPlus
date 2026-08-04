@@ -463,6 +463,8 @@ public:
   {
   }
 
+  std::string ToString() const { char buf[128]; snprintf(buf, sizeof(buf), "TrellisQuantizer(maxRam=%zu)", m_maxRamBytes); return std::string(buf); }
+
   std::vector<bool> Quantize(const std::vector<double>& input, uint32_t sampleRate) override
   {
     if (input.empty())
