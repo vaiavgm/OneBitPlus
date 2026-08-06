@@ -13,6 +13,7 @@
 #include "src/SampleTools.h" 
 #include "src/IAudioEffect.h" 
 #include "src/IQuantizer.h"
+#include "src/IScrollContainer.h"
 #include "src/DragDropWaveformDisplay.h"
 #include <string.h>
 
@@ -215,11 +216,14 @@ public:
   std::vector<std::string> mSamplePaths;
   // Persist the pipeline string used to process each sample
   std::vector<std::string> mSamplePipelines;
-  // Backing text for the sample paths display
-  std::string mSamplePathsText;
-  IEditableTextControl* mSampleListControl = nullptr;
+  // Backing buffer for the sample paths display (fixed capacity to avoid pointer invalidation)
+  std::vector<char> mSamplePathsBuffer;
+
+  IScrollContainer* mSampleListContainer = nullptr;
+  IMultiLineTextControl* mSampleListControl = nullptr;
 
 private:
   uint32_t mLastLoadedSampleRate = 0;
+  void UpdateSampleListBuffer();
 #endif
 };

@@ -329,11 +329,13 @@
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_Parameter.h" />
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_ProcessorBase.h" />
     <ClInclude Include="..\..\..\IPlug\VST3\IPlugVST3_View.h" />
+    <ClInclude Include="..\src\BitCompression.h" />
     <ClInclude Include="..\src\config.h" />
     <ClInclude Include="..\src\DeltaSigmaQuantizer.h" />
     <ClInclude Include="..\src\DragDropWaveformDisplay.h" />
     <ClInclude Include="..\src\IAudioEffect.h" />
     <ClInclude Include="..\src\IQuantizer.h" />
+    <ClInclude Include="..\src\IScrollContainer.h" />
     <ClInclude Include="..\src\RawQuantizer.h" />
     <ClInclude Include="..\src\SampleData.h" />
     <ClInclude Include="..\src\SampleLoader.h" />

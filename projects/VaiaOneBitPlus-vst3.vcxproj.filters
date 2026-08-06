@@ -423,6 +423,12 @@
     <ClInclude Include="..\src\DragDropWaveformDisplay.h">
       <Filter>src\GUI</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\IScrollContainer.h">
+      <Filter>src\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\BitCompression.h">
+      <Filter>src\BitCompression</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IGraphics">
@@ -502,6 +508,9 @@
     </Filter>
     <Filter Include="src\GUI">
       <UniqueIdentifier>{f5aa3213-2800-4fa2-a117-5fd6573b12e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\BitCompression">
+      <UniqueIdentifier>{36f9f233-31f7-4755-864e-564fc5b1ed58}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

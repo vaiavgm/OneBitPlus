@@ -7,6 +7,8 @@
 #include <LFO.h>
 
 #include "src/SampleLoader.h"
+#include "src/SampleData.h"
+#include "src/IScrollContainer.h"
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -617,13 +619,38 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new IVKnobControl(
       IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune4, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
-    IEditableTextControl* pEditableTextControl = new IEditableTextControl(IRECT(25, 700, 100, 725), kMyString);
-    pGraphics->AttachControl(pEditableTextControl);
+ 
+// Your target viewport coordinates
+    IRECT scrollViewport = IRECT(600.0f, 500.0f, 1400.0f, 580.0f);
+    float totalVirtualHeight = 2000.0f;
 
-    // Sample paths list (display imported sample file paths)
-    mSamplePathsText = "";
-    mSampleListControl = new IEditableTextControl(IRECT(340.0f, 500.0f, 900.0f, 650.0f), const_cast<char*>(mSamplePathsText.c_str()));
-    pGraphics->AttachControl(mSampleListControl);
+
+    // Style text alignment
+    IText adjustedTextSettings = SMALL_TEXT.WithVAlign(EVAlign::Top).WithAlign(EAlign::Near);
+
+    // Initialize your multiline text layout block inside the virtual area
+    IRECT initialVirtualBounds = IRECT(scrollViewport.L, scrollViewport.T, scrollViewport.R, scrollViewport.T + totalVirtualHeight);
+
+    //mSampleListContainer = new IScrollContainer(scrollViewport, totalVirtualHeight);
+    //pGraphics->AttachControl(mSampleListContainer);
+
+   // mSampleListControl = new IMultiLineTextControl(initialVirtualBounds, "1No samples loaded. Drop WAV files into the drop area to import.", adjustedTextSettings);
+   // mSampleListContainer->AddChildControl(mSampleListControl);
+
+
+
+
+    // Initialize visible placeholder so users notice the control area immediately
+    if (!mSamplePathsBuffer.empty())
+    {
+      std::snprintf(mSamplePathsBuffer.data(), mSamplePathsBuffer.size(), "2No samples loaded. Drop WAV files into the drop area to import.");
+      if (mSampleListControl)
+      {
+        //mSampleListControl->SetStr(mSamplePathsBuffer.data());
+      //  mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
+       // mSampleListControl->SetDirty(true);
+      }
+    }
 
 
     IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
@@ -631,7 +658,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     mDropBox = new DragDropWaveformDisplay(
       dropBoxRect,
       // --- 1. THE DROP CALLBACK ---
-      [this, pEditableTextControl](const char* filePath) {
+      [this](const char* filePath) {
         if (!filePath)
           return;
 
@@ -648,7 +675,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         std::vector<int8_t> sampleData = mDSP.mSampleManager.GetDynamicSampleData(sampleIndex);
         mDropBox->SetWaveformData(sampleData);
         kMyString = const_cast<char*>(PrintBits(filePath, sampleData).c_str());
-        pEditableTextControl->SetDirty(true);
+        
       },
 
       // --- 2. MOUSE DOWN (Note On) ---
@@ -669,6 +696,48 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   };
 
 #endif
+}
+
+void VaiaOneBitPlus::UpdateSampleListBuffer()
+{
+  if (mSamplePathsBuffer.empty())
+    return;
+
+  std::string combined;
+  // Format each sample on its own block. Show mapped velocity, then path on same line,
+  // and pipeline string on the next indented line.
+  for (size_t i = 0; i < mSamplePaths.size(); ++i)
+  {
+    if (i) combined += "\n";
+
+    // Velocity mapping: dynamic slot i maps to velocity = kPreparedCount + 1 + i
+    int vel = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + static_cast<int>(i);
+    combined += std::to_string(vel);
+    combined += ": ";
+    combined += mSamplePaths[i];
+    combined += "\n";
+
+    // pipeline line, indented
+    combined += "   ->";
+    if (i < mSamplePipelines.size() && !mSamplePipelines[i].empty())
+    {
+      combined += mSamplePipelines[i];
+    }
+    else
+    {
+      combined += "<no pipeline>";
+    }
+    combined += "\n";
+  }
+
+  // Copy into fixed buffer and mark control dirty
+  std::snprintf(mSamplePathsBuffer.data(), mSamplePathsBuffer.size(), "%s", combined.c_str());
+  if (mSampleListControl)
+  {
+    //mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
+   // mSampleListControl->SetStr(mSamplePathsBuffer.data());
+   // mSampleListControl->SetDirty(true);
+  }
 }
 
 bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
@@ -735,7 +804,14 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
   mDSP.mSampleManager.ClearDynamicSamples();
   mSamplePaths.clear();
   mSamplePipelines.clear();
-  mSamplePathsText.clear();
+  // clear buffer
+  if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
+  if (mSampleListControl)
+  {
+    //  mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
+   // mSampleListControl->SetStr(mSamplePathsBuffer.data());
+   // mSampleListControl->SetDirty(true);
+  }
 
   for (uint32_t i = 0; i < numSlots; ++i)
   {
@@ -770,17 +846,10 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
     WDL_String wpl;
     pos = chunk.GetStr(wpl, pos);
     mSamplePipelines.emplace_back(wpl.Get());
-
-    if (!mSamplePathsText.empty())
-      mSamplePathsText += "\n";
-
-    mSamplePathsText += ws.Get();
-    if (wpl.Get() && wpl.Get()[0] != '\0')
-    {
-      mSamplePathsText += " -> ";
-      mSamplePathsText += wpl.Get();
-    }
   }
+
+  // Update the GUI text buffer
+  UpdateSampleListBuffer();
 
   return pos;
 }
@@ -873,25 +942,10 @@ int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate
   int idx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
   if (idx >= 0)
   {
-    // store path for UI
+    // store path and pipeline for UI
     mSamplePaths.emplace_back(filePath);
     mSamplePipelines.emplace_back(pipeline.ToString());
-    // update backing text and refresh control
-    if (!mSamplePathsText.empty())
-      mSamplePathsText += "\n";
-    mSamplePathsText += filePath;
-    // show pipeline after path
-    if (!mSamplePipelines.empty())
-    {
-      const auto& pl = mSamplePipelines.back();
-      if (!pl.empty())
-      {
-        mSamplePathsText += " -> ";
-        mSamplePathsText += pl;
-      }
-    }
-    if (mSampleListControl)
-      mSampleListControl->SetDirty(true);
+    UpdateSampleListBuffer();
   }
 
   return idx;
@@ -917,22 +971,7 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   {
     mSamplePaths.emplace_back(filePath);
     mSamplePipelines.emplace_back(pipeline.ToString());
-    // update backing text and refresh control
-    if (!mSamplePathsText.empty())
-      mSamplePathsText += "\n";
-    mSamplePathsText += filePath;
-    // show pipeline after path
-    if (!mSamplePipelines.empty())
-    {
-      const auto& pl = mSamplePipelines.back();
-      if (!pl.empty())
-      {
-        mSamplePathsText += " -> ";
-        mSamplePathsText += pl;
-      }
-    }
-    if (mSampleListControl)
-      mSampleListControl->SetDirty(true);
+    UpdateSampleListBuffer();
   }
 
   PrintBits(filePath, packed1Bit);
@@ -1002,7 +1041,7 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   // Also clear recorded paths when reloading base factory samples
   mSamplePaths.clear();
   mSamplePipelines.clear();
-  mSamplePathsText.clear();
+  if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
 
   // Create your pipeline as usual
   AudioPipeline pipeline = CreateDefaultPipeline();
@@ -1106,6 +1145,8 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   //ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
   //ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
  // ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\SineBlip.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
+  // Ensure the GUI sample list reflects current samples after reload
+  UpdateSampleListBuffer();
 }
 
 #endif

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.8.12023.21 stable
+VisualStudioVersion = 18.8.12023.21
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VaiaOneBitPlus-app", "projects\VaiaOneBitPlus-app.vcxproj", "{41785AE4-5B70-4A75-880B-4B418B4E13C6}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VaiaOneBitPlus-vst3", "projects\VaiaOneBitPlus-vst3.vcxproj", "{079FC65A-F0E5-4E97-B318-A16D1D0B89DF}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VaiaOneBitPlus-aax", "projects\VaiaOneBitPlus-aax.vcxproj", "{DC4B5920-933D-4C82-B842-F34431D55A93}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CompressionAnalyzer", "CompressionAnalyzer\CompressionAnalyzer.vcxproj", "{523F5A23-9161-4D7C-BC08-68AA2BA002A8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -66,6 +68,18 @@ Global
 		{DC4B5920-933D-4C82-B842-F34431D55A93}.Tracer|Win32.Build.0 = Tracer|Win32
 		{DC4B5920-933D-4C82-B842-F34431D55A93}.Tracer|x64.ActiveCfg = Tracer|x64
 		{DC4B5920-933D-4C82-B842-F34431D55A93}.Tracer|x64.Build.0 = Tracer|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Debug|Win32.Build.0 = Debug|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Debug|x64.ActiveCfg = Debug|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Debug|x64.Build.0 = Debug|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Release|Win32.ActiveCfg = Release|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Release|Win32.Build.0 = Release|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Release|x64.ActiveCfg = Release|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Release|x64.Build.0 = Release|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Tracer|Win32.ActiveCfg = Release|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Tracer|Win32.Build.0 = Release|Win32
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Tracer|x64.ActiveCfg = Release|x64
+		{523F5A23-9161-4D7C-BC08-68AA2BA002A8}.Tracer|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
