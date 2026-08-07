@@ -9,6 +9,7 @@
 #include "src/SampleLoader.h"
 #include "src/SampleData.h"
 #include "src/IScrollContainer.h"
+#include "src/Debug.h"
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -1029,7 +1030,7 @@ std::string VaiaOneBitPlus::PrintBits(const char* filePath, const std::vector<in
   }
   code += "};";
 
-  MY_PRINTFLONG("%s\n", code.c_str());
+  MY_PRINTF("%s\n", code.c_str());
   return code;
 }
 

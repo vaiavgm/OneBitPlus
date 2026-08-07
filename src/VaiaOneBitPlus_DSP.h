@@ -1,11 +1,5 @@
 #pragma once
 
-#define MY_PRINTF(...)                                                                                                                                                                                 \
-  {                                                                                                                                                                                                    \
-    char buf[512];                                                                                                                                                                                     \
-    sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
-    OutputDebugString(buf);                                                                                                                                                                            \
-  }
 
 #include <IPlugLogger.h>
 #include <IPlugMidi.h>
@@ -32,6 +26,8 @@
 
 #include <algorithm>
 #include <cstring>
+
+#include "src/Debug.h"
 
 
 constexpr size_t mNumOscPerVoice = 8;
@@ -79,6 +75,35 @@ class OneBitPlusDSP
 {
 public:
   SampleData::SampleManager mSampleManager;
+
+  struct OscPreset
+  {
+    // PWM envelope
+    double pwmAttack = 0.0;
+    double pwmDecay = 0.0;
+    double pwmRelease = 0.0;
+    double pwmSustain = 0.0;
+
+    double pwmKeyTrack = 0.0;
+    double pwmModStrength = 0.0;
+    double pwmOffsetStrength = 0.0;
+
+    // Pitch envelope
+    double pitchAttack = 0.0;
+    double pitchDecay = 0.0;
+    double pitchRelease = 0.0;
+    double pitchSustain = 0.0;
+
+    double pitchKeyTrack = 0.0;
+    double pitchModStrength = 0.0;
+    double pitchOffsetStrength = 0.0;
+
+    // unison
+    int extraUnisonCount = 1;
+    double extraDetuneCents = 0.0;
+  };
+
+  std::array<OscPreset, 4> mOscPresets{};
 
 
 #pragma mark - Voice
@@ -178,7 +203,6 @@ public:
       int velInt = static_cast<int>(std::round(level * 127.0));
       mOscId = std::clamp((velInt > 0 ? velInt - 1 : 0) / 32, 0, 3);
 
-      MY_PRINTF("OSC ID: %d. \n", mOscId);
 
       switch (mOscId)
       {
@@ -195,6 +219,34 @@ public:
         mMode = VoiceMode::kSynth4;
         break;
       }
+
+      // Copy preset for this osc into the voice so stolen voices pick up correct parameters
+      {
+        auto& preset = mParentDSP.mOscPresets[mOscId];
+        // PWM envelope times
+        mPwmEnv.SetStageTime(ADSREnvelope<T>::EStage::kAttack, preset.pwmAttack);
+        mPwmEnv.SetStageTime(ADSREnvelope<T>::EStage::kDecay, preset.pwmDecay);
+        mPwmEnv.SetStageTime(ADSREnvelope<T>::EStage::kRelease, preset.pwmRelease);
+
+        // Pitch envelope times
+        mPitchEnv.SetStageTime(ADSREnvelope<T>::EStage::kAttack, preset.pitchAttack);
+        mPitchEnv.SetStageTime(ADSREnvelope<T>::EStage::kDecay, preset.pitchDecay);
+        mPitchEnv.SetStageTime(ADSREnvelope<T>::EStage::kRelease, preset.pitchRelease);
+
+        // modulation strengths
+        pwmKeyTrack = preset.pwmKeyTrack;
+        pwmModStrength = preset.pwmModStrength;
+        pwmOffsetStrength = preset.pwmOffsetStrength;
+
+        pitchKeyTrackStrength = preset.pitchKeyTrack;
+        pitchModStrength = preset.pitchModStrength;
+        pitchOffsetStrength = preset.pitchOffsetStrength;
+
+        extraUnisonCount = preset.extraUnisonCount;
+        extraDetuneCents = preset.extraDetuneCents;
+      }
+
+      MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
 
 
       mSampleOsc.Reset();
@@ -320,6 +372,13 @@ public:
 
       int velInt = static_cast<int>(std::round(velocity));
 
+      // rate-limit debug printing to once every 1024 samples per voice
+      /*
+      if ((++mDebugSampleCounter % 1024) == 0)
+      {
+        MY_PRINTF("ProcessSamplesAccumulating: this=%p mOscId=%zu derivedVel=%.1f midiNote=%.2f\n", (void*)this, mOscId, velocity, midiNote);
+      }
+      */
 
       int unison = std::clamp(extraUnisonCount, 1, 8);
       double detuneRange = extraDetuneCents;
@@ -556,11 +615,18 @@ public:
       const int pitchSustainSmoothers[4] = {kModPitchSustainSmoother1, kModPitchSustainSmoother2, kModPitchSustainSmoother3, kModPitchSustainSmoother4};
 
       // Helper to apply parameter updates to all matching active voices
-      auto ApplyToVoice = [this, targetMode](auto&& fn) {
+      auto ApplyToVoice = [this, targetMode, oscIndex, relParamIdx, paramIdx, value](auto&& fn) {
         mSynth.ForEachVoice([&](SynthVoice& synthVoice) {
           auto& voice = dynamic_cast<OneBitPlusDSP::Voice&>(synthVoice);
           if (voice.mMode == targetMode)
           {
+            /*
+            // Rate-limit param-apply logs so UI changes don't flood output
+            if ((++mParamApplyLogCounter % 16) == 0)
+            {
+              MY_PRINTF("SetParam apply oscIndex=%d relParamIdx=%d paramIdx=%d value=%.4f to voice=%p mode=%d\n", oscIndex, relParamIdx, paramIdx, value, (void*)&voice, static_cast<int>(voice.mMode));
+            }
+            */
             fn(voice);
           }
         });
@@ -571,26 +637,33 @@ public:
       {
       // --- PWM ENVELOPE ---
       case kParamPwmAttack1:
+        mOscPresets[oscIndex].pwmAttack = value;
         ApplyToVoice([value](Voice& v) { v.mPwmEnv.SetStageTime(EEnvStage::kAttack, value); });
         break;
       case kParamPwmDecay1:
+        mOscPresets[oscIndex].pwmDecay = value;
         ApplyToVoice([value](Voice& v) { v.mPwmEnv.SetStageTime(EEnvStage::kDecay, value); });
         break;
       case kParamPwmRelease1:
+        mOscPresets[oscIndex].pwmRelease = value;
         ApplyToVoice([value](Voice& v) { v.mPwmEnv.SetStageTime(EEnvStage::kRelease, value); });
         break;
       case kParamPwmSustain1:
+        mOscPresets[oscIndex].pwmSustain = static_cast<double>(value) / 100.0;
         mParamsToSmooth[pwmSustainSmoothers[oscIndex]] = static_cast<T>(value) / 100.0;
         break;
 
       // --- PWM MODULATION ---
       case kParamPwmKeyTrack1:
+        mOscPresets[oscIndex].pwmKeyTrack = value;
         ApplyToVoice([value](Voice& v) { v.pwmKeyTrack = value; });
         break;
       case kParamPwmModPow1:
+        mOscPresets[oscIndex].pwmModStrength = value;
         ApplyToVoice([value](Voice& v) { v.pwmModStrength = value; });
         break;
       case kParamPwmOffset1:
+        mOscPresets[oscIndex].pwmOffsetStrength = value;
         ApplyToVoice([value](Voice& v) { v.pwmOffsetStrength = value; });
         break;
 
@@ -613,26 +686,33 @@ public:
 
       // --- PITCH ENVELOPE ---
       case kParamPitchAttack1:
+        mOscPresets[oscIndex].pitchAttack = value;
         ApplyToVoice([value](Voice& v) { v.mPitchEnv.SetStageTime(EEnvStage::kAttack, value); });
         break;
       case kParamPitchDecay1:
+        mOscPresets[oscIndex].pitchDecay = value;
         ApplyToVoice([value](Voice& v) { v.mPitchEnv.SetStageTime(EEnvStage::kDecay, value); });
         break;
       case kParamPitchRelease1:
+        mOscPresets[oscIndex].pitchRelease = value;
         ApplyToVoice([value](Voice& v) { v.mPitchEnv.SetStageTime(EEnvStage::kRelease, value); });
         break;
       case kParamPitchSustain1:
+        mOscPresets[oscIndex].pitchSustain = static_cast<double>(value) / 100.0;
         mParamsToSmooth[pitchSustainSmoothers[oscIndex]] = static_cast<T>(value) / 100.0;
         break;
 
       // --- PITCH MODULATION ---
       case kParamPitchKeyTrack1:
+        mOscPresets[oscIndex].pitchKeyTrack = value;
         ApplyToVoice([value](Voice& v) { v.pitchKeyTrackStrength = value; });
         break;
       case kParamPitchModPow1:
+        mOscPresets[oscIndex].pitchModStrength = value;
         ApplyToVoice([value](Voice& v) { v.pitchModStrength = value; });
         break;
       case kParamPitchOffset1:
+        mOscPresets[oscIndex].pitchOffsetStrength = value;
         ApplyToVoice([value](Voice& v) { v.pitchOffsetStrength = value; });
         break;
 
@@ -655,9 +735,11 @@ public:
 
       // --- UNISON & DETUNE ---
       case kParamExtraUnison1:
+        mOscPresets[oscIndex].extraUnisonCount = std::clamp(static_cast<int>(value), 1, 8);
         ApplyToVoice([value](Voice& v) { v.extraUnisonCount = std::clamp(static_cast<int>(value), 1, 8); });
         break;
       case kParamExtraDetune1:
+        mOscPresets[oscIndex].extraDetuneCents = std::clamp(value, 0.0, 100.0);
         ApplyToVoice([value](Voice& v) { v.extraDetuneCents = std::clamp(value, 0.0, 100.0); });
         break;
       }
@@ -690,6 +772,7 @@ public:
     OSC_Algorithm algo = used_algo;
 
     MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
+    // int mParamApplyLogCounter = 0;
     WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
     WDL_PtrList<T> mModulations;      // Ptrlist for global modulations
     LogParamSmooth<T, kNumModulations> mParamSmoother;

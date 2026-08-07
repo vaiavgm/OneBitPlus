@@ -9,12 +9,7 @@
 #include "src/DeltaSigmaQuantizer.h"
 #include "src/RawQuantizer.h"
 
-#define MY_PRINTF(...)                                                                                                                                                                                 \
-  {                                                                                                                                                                                                    \
-    char buf[512];                                                                                                                                                                                     \
-    sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
-    OutputDebugString(buf);                                                                                                                                                                            \
-  }
+
 
 // --- Abstract Base Class for Pipeline Effects ---
 class IAudioEffect {

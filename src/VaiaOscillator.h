@@ -3,21 +3,11 @@
 #include "Oscillator.h"
 #include <cmath>
 
-#define MY_PRINTF(...) {char buf[512]; sprintf(buf, __VA_ARGS__);  OutputDebugString(buf);}
-
-#define MY_PRINTFLONG(...)                                                                                                                                                                                 \
-  {                                                                                                                                                                                                    \
-    char buf[65536*2];                                                                                                                                                                                     \
-    sprintf(buf, __VA_ARGS__);                                                                                                                                                                         \
-    OutputDebugString(buf);                                                                                                                                                                            \
-  }
+#include <format>
+#include <windows.h>
 
 
-// #include <windows.h>
-// char debugBuf[32];
-// 
-// sprintf(debugBuf, "S#%06f: %02.8f\n", std::sin(IOscillator<T>::mPhase * PI * 2.), IOscillator<T>::mPhase);
-// OutputDebugString(debugBuf);
+
 
 using namespace iplug;
 
@@ -45,26 +35,19 @@ public:
       mPhase -= 1.0;
     }
 
-    bool phaseFlip = false;
 
     while (m_pwm > 1) {
       m_pwm--;
-      phaseFlip = true;
     }
     while (m_pwm < 0) {
       m_pwm++;
-      phaseFlip = true;
     }
 
     if (m_pwm == 0) return 0.0;
 
     int pos = mPhase > m_pwm ? 0 : 1;
 
-     // m_pwm+=0.000005f; // "phase" the pulse
-    
-
     int temp = squareLookup[pos % 2];
-
 
 
     return temp;

@@ -429,6 +429,9 @@
     <ClInclude Include="..\src\BitCompression.h">
       <Filter>src\BitCompression</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\Debug.h">
+      <Filter>src\Debugging</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IGraphics">
@@ -511,6 +514,9 @@
     </Filter>
     <Filter Include="src\BitCompression">
       <UniqueIdentifier>{36f9f233-31f7-4755-864e-564fc5b1ed58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\Debugging">
+      <UniqueIdentifier>{e06d438d-d9a8-49ce-8a2e-fc0f61bdc2ad}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
