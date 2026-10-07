@@ -1,4 +1,6 @@
 #pragma once
+#include <cmath>
+#include "IPlugConstants.h"
 #include "Oscillator.h"
 #include <algorithm>
 #include <cmath>

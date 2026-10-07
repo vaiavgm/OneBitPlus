@@ -1,10 +1,5 @@
 #pragma once
 
-#if IPLUG_DSP
-// will use EParams in OneBitIsEnough_DSP.h
-#include "VaiaOneBitPlus_DSP.h"
-#endif
-
 #include <IPlug_include_in_plug_hdr.h>
 #include <IPlugConstants.h>
 #include <IPlugMidi.h>
@@ -183,6 +178,11 @@ enum EControlTags
   kNumCtrlTags
 };
 
+
+#if IPLUG_DSP
+// OneBitPlus_DSP.h uses EParams, so it must come after the enum
+#include "VaiaOneBitPlus_DSP.h"
+#endif
 
 class VaiaOneBitPlus final : public Plugin
 {

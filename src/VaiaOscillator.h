@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+#include "IPlugConstants.h"
 #include "Oscillator.h"
 #include <cmath>
 
@@ -31,8 +33,8 @@ public:
     IOscillator<T>::SetFreqCPS(freqHz);
     IOscillator<T>::mPhase = IOscillator<T>::mPhase + IOscillator<T>::mPhaseIncr;
 
-    while (mPhase > 1.0) {
-      mPhase -= 1.0;
+    while (IOscillator<T>::mPhase > 1.0) {
+      IOscillator<T>::mPhase -= 1.0;
     }
 
 
@@ -45,7 +47,7 @@ public:
 
     if (m_pwm == 0) return 0.0;
 
-    int pos = mPhase > m_pwm ? 0 : 1;
+    int pos = IOscillator<T>::mPhase > m_pwm ? 0 : 1;
 
     int temp = squareLookup[pos % 2];
 
