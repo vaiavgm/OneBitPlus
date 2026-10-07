@@ -246,7 +246,7 @@ public:
         extraDetuneCents = preset.extraDetuneCents;
       }
 
-      MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
+      // MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
 
 
       mSampleOsc.Reset();

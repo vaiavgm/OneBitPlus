@@ -1,5 +1,6 @@
 #include "src/VaiaOneBitPlus.h"
 #include <IPlug_include_in_plug_src.h>
+#include "VaiaBuildTag.h"
 
 #include <IControls.h>
 #include <IGraphicsStructs.h>
@@ -251,9 +252,9 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new ITextControl(IRECT(1070.0, 0.0f, 1220.0, 20.0f), "Extras", HEADER_TEXT));
 
 
-    pGraphics->AttachControl(new IVSliderControl(IRECT(00.0, 35.0f + 440, 80.0, 120.0f + 440), kInputDither, "Dither", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + 440, 360.0, 90.0f + 440), kInputProtect, "Input Protection", DEFAULT_STYLE.WithShowLabel(false), true, EDirection::Vertical));
+   // pGraphics->AttachControl(new IVSliderControl(IRECT(00.0, 35.0f + 440, 80.0, 120.0f + 440), kInputDither, "Dither", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+   // pGraphics->AttachControl(
+   //   new IVSlideSwitchControl(IRECT(340.0, 60.0f + 440, 360.0, 90.0f + 440), kInputProtect, "Input Protection", DEFAULT_STYLE.WithShowLabel(false), true, EDirection::Vertical));
 
     //////////////// OSC 1
 
@@ -622,7 +623,7 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
  
 // Your target viewport coordinates
-    IRECT scrollViewport = IRECT(600.0f, 500.0f, 1400.0f, 580.0f);
+    IRECT scrollViewport = IRECT(600.0f, 500.0f, 1400.0f, 680.0f);
     float totalVirtualHeight = 2000.0f;
 
 
@@ -632,29 +633,19 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     // Initialize your multiline text layout block inside the virtual area
     IRECT initialVirtualBounds = IRECT(scrollViewport.L, scrollViewport.T, scrollViewport.R, scrollViewport.T + totalVirtualHeight);
 
-    //mSampleListContainer = new IScrollContainer(scrollViewport, totalVirtualHeight);
-    //pGraphics->AttachControl(mSampleListContainer);
+    mSampleListContainer = new IScrollContainer(scrollViewport, totalVirtualHeight);
+    pGraphics->AttachControl(mSampleListContainer);
 
-   // mSampleListControl = new IMultiLineTextControl(initialVirtualBounds, "1No samples loaded. Drop WAV files into the drop area to import.", adjustedTextSettings);
-   // mSampleListContainer->AddChildControl(mSampleListControl);
+    mSampleListControl = new IMultiLineTextControl(initialVirtualBounds, "No samples loaded. Drop WAV files into the drop area to import.", adjustedTextSettings);
+    mSampleListContainer->AddChildControl(mSampleListControl);
 
-
-
-
-    // Initialize visible placeholder so users notice the control area immediately
-    if (!mSamplePathsBuffer.empty())
-    {
-      std::snprintf(mSamplePathsBuffer.data(), mSamplePathsBuffer.size(), "2No samples loaded. Drop WAV files into the drop area to import.");
-      if (mSampleListControl)
-      {
-        //mSampleListControl->SetStr(mSamplePathsBuffer.data());
-      //  mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
-       // mSampleListControl->SetDirty(true);
-      }
-    }
+    UpdateSampleListBuffer();
 
 
-    IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
+
+
+
+    IRECT dropBoxRect(25.0f, 500.0f, 550.0f, 680.0f);
 
     mDropBox = new DragDropWaveformDisplay(
       dropBoxRect,
@@ -666,50 +657,50 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         uint32_t targetSampleRate = (uint32_t)GetSampleRate();
         ResampleAlgo resampleAlgo = ResampleAlgo::Lanczos;
 
-        AudioPipeline p1;
-        p1.effects.push_back(std::make_shared<NormalizeEffect>());
-        p1.effects.push_back(std::make_shared<SaturateEffect>(10.0));
-        p1.effects.push_back(std::make_shared<DitherEffect>(0.1));
-        p1.quantizer = std::make_shared<TrellisQuantizer>();
 
-        int sampleIndex = ImportSampleAndPrintBits(filePath, targetSampleRate, resampleAlgo, p1);
+
+
+
+        int sampleIndex = ImportSampleAndPrintBits(filePath, targetSampleRate, resampleAlgo, AudioPipeline::CreateDefaultPipeline());
         std::vector<int8_t> sampleData = mDSP.mSampleManager.GetDynamicSampleData(sampleIndex);
         mDropBox->SetWaveformData(sampleData);
-        kMyString = const_cast<char*>(PrintBits(filePath, sampleData).c_str());
-        
+
       },
 
       // --- 2. MOUSE DOWN (Note On) ---
       [this]() {
+
         IMidiMsg msg;
-        msg.MakeNoteOnMsg(3, 127, 0);
-        SendMidiMsg(msg);
+        msg.MakeNoteOnMsg(3, mDSP.mSampleManager.DynamicCount(), 0); // DynamicCount is one up; but also, there is no velocity 0. so it is fine to operate that way and use the size directly
+        mDSP.ProcessMidiMsg(msg);
+        //SendMidiMsg(msg);
       },
 
       // --- 3. MOUSE UP (Note Off) ---
       [this]() {
         IMidiMsg msg;
         msg.MakeNoteOffMsg(3, 0, 0);
-        SendMidiMsg(msg);
+        mDSP.ProcessMidiMsg(msg);
+        //SendMidiMsg(msg);
       });
 
     pGraphics->AttachControl(mDropBox);
+    VAIA_ATTACH_BUILD_TAG(pGraphics);
   };
 
 #endif
 }
 
-void VaiaOneBitPlus::UpdateSampleListBuffer()
-{
-  if (mSamplePathsBuffer.empty())
-    return;
 
+std::string VaiaOneBitPlus::GetTextualSampleDescription()
+{
   std::string combined;
   // Format each sample on its own block. Show mapped velocity, then path on same line,
   // and pipeline string on the next indented line.
   for (size_t i = 0; i < mSamplePaths.size(); ++i)
   {
-    if (i) combined += "\n";
+    if (i)
+      combined += "\n";
 
     // Velocity mapping: dynamic slot i maps to velocity = kPreparedCount + 1 + i
     int vel = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + static_cast<int>(i);
@@ -730,15 +721,17 @@ void VaiaOneBitPlus::UpdateSampleListBuffer()
     }
     combined += "\n";
   }
+  return combined;
+}
 
-  // Copy into fixed buffer and mark control dirty
-  std::snprintf(mSamplePathsBuffer.data(), mSamplePathsBuffer.size(), "%s", combined.c_str());
-  if (mSampleListControl)
+void VaiaOneBitPlus::UpdateSampleListBuffer()
+{
+  if (mSampleListContainer)
   {
-    //mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
-   // mSampleListControl->SetStr(mSamplePathsBuffer.data());
-   // mSampleListControl->SetDirty(true);
+    mSampleListContainer->UpdateChildText(GetTextualSampleDescription().c_str());
+    mSampleListContainer->SetDirty(true);
   }
+
 }
 
 bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
@@ -805,14 +798,6 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
   mDSP.mSampleManager.ClearDynamicSamples();
   mSamplePaths.clear();
   mSamplePipelines.clear();
-  // clear buffer
-  if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
-  if (mSampleListControl)
-  {
-    //  mSampleListContainer->UpdateChildText(mSamplePathsBuffer.data());
-   // mSampleListControl->SetStr(mSamplePathsBuffer.data());
-   // mSampleListControl->SetDirty(true);
-  }
 
   for (uint32_t i = 0; i < numSlots; ++i)
   {
@@ -844,9 +829,11 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
     pos = chunk.GetStr(ws, pos);
     mSamplePaths.emplace_back(ws.Get());
 
+
     WDL_String wpl;
     pos = chunk.GetStr(wpl, pos);
     mSamplePipelines.emplace_back(wpl.Get());
+
   }
 
   // Update the GUI text buffer
@@ -976,7 +963,7 @@ int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targ
   }
 
   PrintBits(filePath, packed1Bit);
-
+  return mDSP.mSampleManager.DynamicCount()-1;
 }
 
 
@@ -1042,111 +1029,9 @@ void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
   // Also clear recorded paths when reloading base factory samples
   mSamplePaths.clear();
   mSamplePipelines.clear();
-  if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
-
-  // Create your pipeline as usual
-  AudioPipeline pipeline = CreateDefaultPipeline();
-
-  AudioPipeline snarePipeline;
-  snarePipeline.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline.effects.push_back(std::make_shared<SaturateEffect>(4.0));
-  snarePipeline.effects.push_back(std::make_shared<SampleRateReductionEffect>(8000));
-  snarePipeline.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline snarePipeline2;
-  snarePipeline2.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline2.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::HighPass, 400, 8));
-  snarePipeline2.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::LowPass, 100, 8));
-  snarePipeline2.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline snarePipeline3;
-  snarePipeline3.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline3.effects.push_back(std::make_shared<LowPassFilterEffect>(8000));
-  snarePipeline3.effects.push_back(std::make_shared<HighPassFilterEffect>(2000));
-  snarePipeline3.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline snarePipeline4;
-  snarePipeline4.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline4.effects.push_back(std::make_shared<ClippingEffect>(0.2, true));
-  snarePipeline4.effects.push_back(std::make_shared<DitherEffect>(0.2));
-  snarePipeline4.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline snarePipeline5;
-  snarePipeline5.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline5.effects.push_back(std::make_shared<ClippingEffect>(0.2, true));
-  snarePipeline5.effects.push_back(std::make_shared<DitherEffect>(0.02));
-  snarePipeline5.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline snarePipeline6;
-  snarePipeline6.effects.push_back(std::make_shared<NormalizeEffect>());
-  snarePipeline6.effects.push_back(std::make_shared<ClippingEffect>(0.4, true));
-  snarePipeline6.effects.push_back(std::make_shared<SampleRateReductionEffect>(1000));
-  snarePipeline6.effects.push_back(std::make_shared<DitherEffect>(0.0));
-  snarePipeline6.quantizer = std::make_shared<TrellisQuantizer>();
+  //if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
 
 
-  AudioPipeline voxP1;
-
-  voxP1.effects.push_back(std::make_shared<NormalizeEffect>());
-  // voxP1.effects.push_back(std::make_shared<SaturateEffect>(10.0));
-  // voxP1.effects.push_back(std::make_shared<ClippingEffect>(0.5, true));
-  // voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::HighPass, 200, 4));
-  // voxP1.effects.push_back(std::make_shared<BiquadFilterEffect>(BiquadFilterEffect::FilterType::LowPass, 7000, 6));
-  // voxP1.effects.push_back(std::make_shared<ClippingEffect>(0.3, true));
-  voxP1.effects.push_back(std::make_shared<DitherEffect>(0.1));
-  voxP1.quantizer = std::make_shared<TrellisQuantizer>();
-
-  AudioPipeline voxP2;
-  voxP2.effects.push_back(std::make_shared<NormalizeEffect>());
-  voxP2.effects.push_back(std::make_shared<SaturateEffect>(2.0));
-  voxP2.effects.push_back(std::make_shared<DitherEffect>(0.01));
-  voxP2.quantizer = std::make_shared<TrellisQuantizer>();
-
-  /*
-  auto startTime = std::chrono::high_resolution_clock::now();
-  auto endTime = std::chrono::high_resolution_clock::now();
-  auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-  MY_PRINTF("Duration: %lld ms", durationMs);
-  */
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Roland_TR-808/TR-808Snare05.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, snarePipeline);
-
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_snare_10.wav", targetSampleRate, ResampleAlgo::Lanczos, pipeline);
-
-
-  AudioPipeline kickPipeline;
-  kickPipeline.effects.push_back(std::make_shared<NormalizeEffect>());
-  kickPipeline.effects.push_back(std::make_shared<ClippingEffect>(0.8, true));
-  //kickPipeline.effects.push_back(std::make_shared<LowPassFilterEffect>(10000.0));
-  kickPipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
-  kickPipeline.effects.push_back(std::make_shared<DitherEffect>(0.015));
-  kickPipeline.quantizer = std::make_shared<TrellisQuantizer>();
-
-
-  AudioPipeline kickPipeline2;
- // kickPipeline2.effects.push_back(std::make_shared<TrimEffect>(0, 235));
-  kickPipeline2.effects.push_back(std::make_shared<NormalizeEffect>());
-  kickPipeline2.effects.push_back(std::make_shared<SaturateEffect>(3.0));
-  kickPipeline2.effects.push_back(std::make_shared<GainEffect>(GainEffect::FromDecibels(6.0)));
-  //kickPipeline2.effects.push_back(std::make_shared<DitherEffect>(0.015));
-  kickPipeline2.quantizer = std::make_shared<TrellisQuantizer>();
-
-  //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Xilent Power Pack 1/XIL_drum_one_shots/XIL_kick_6.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
-
-
-  //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
-
-
-
-    kickPipeline2.quantizer = std::make_shared<DeltaSigmaQuantizer>();
-    //ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, kickPipeline2);
-  // ImportSampleAndPrintBits("E:/Eigene Dateien/Musik/_Production/Samples/Boom Bap Drums/Percs/VOX OHHH.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP2);
-  //ImportSampleAndPrintBits("C:\\Users\\Edi\\Desktop\\Ultimate Boom Bap Drumkit\\Kicks\\07_Kick_16_SP.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
-  //ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\Test.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
- // ImportSampleAndPrintBits("C:\\Users\\Edi\\Documents\\REAPER Media\\SineBlip.wav", targetSampleRate, ResampleAlgo::Lanczos, voxP1);
-  // Ensure the GUI sample list reflects current samples after reload
   UpdateSampleListBuffer();
 }
 

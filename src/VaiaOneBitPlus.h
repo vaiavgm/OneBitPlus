@@ -200,8 +200,8 @@ public:
   int UnserializeState(const IByteChunk& chunk, int startPos) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
-  int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline());
+  int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline());
   std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
 
   void ReloadSamples(uint32_t targetSampleRate);
@@ -211,13 +211,12 @@ public:
   ISender<1> mOscilloscopeVisSender;
   DragDropWaveformDisplay* mDropBox = nullptr;
 
-  char* kMyString = "Hello, World!";
   // Keep file paths of imported samples for GUI display and persistence
   std::vector<std::string> mSamplePaths;
   // Persist the pipeline string used to process each sample
   std::vector<std::string> mSamplePipelines;
   // Backing buffer for the sample paths display (fixed capacity to avoid pointer invalidation)
-  std::vector<char> mSamplePathsBuffer;
+  std::vector<std::string> mSamplePathsBuffer;
 
   IScrollContainer* mSampleListContainer = nullptr;
   IMultiLineTextControl* mSampleListControl = nullptr;
@@ -225,5 +224,6 @@ public:
 private:
   uint32_t mLastLoadedSampleRate = 0;
   void UpdateSampleListBuffer();
+  std::string GetTextualSampleDescription();
 #endif
 };

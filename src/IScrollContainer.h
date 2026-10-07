@@ -41,6 +41,8 @@ public:
 
     g.PathClipRegion(mRECT);
 
+    g.DrawRect(COLOR_WHITE, mRECT, 0, 2.0f);
+
     IRECT childRect = IRECT(mRECT.L, mRECT.T + mScrollY, mRECT.R, mRECT.T + mScrollY + mVirtualHeight);
     mChild->SetTargetRECT(childRect);
     mChild->SetRECT(childRect);

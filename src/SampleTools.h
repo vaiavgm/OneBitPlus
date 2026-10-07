@@ -186,7 +186,7 @@ inline static void LowPassFilter(std::vector<int32_t>& buffer, double cutoffFreq
 
 
 
-inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = CreateDefaultPipeline())
+inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline())
 {
   if (inputBuffer.empty() || !pipeline.quantizer)
     return {};

@@ -503,15 +503,27 @@ struct AudioPipeline
     if (quantizer) out += quantizer->ToString();
     return out;
   }
+
+  // Default Pipeline Factory: Normalize -> Gentle Saturation -> Delta-Sigma
+  inline static AudioPipeline CreateDefaultPipeline()
+  {
+    /*
+  AudioPipeline p1;
+    p1.effects.push_back(std::make_shared<NormalizeEffect>());
+    p1.effects.push_back(std::make_shared<SaturateEffect>(10.0));
+    p1.effects.push_back(std::make_shared<DitherEffect>(0.1));
+    p1.quantizer = std::make_shared<TrellisQuantizer>();
+  */
+
+    AudioPipeline pipeline;
+    pipeline.effects.push_back(std::make_shared<NormalizeEffect>());
+    pipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
+    //pipeline.effects.push_back(std::make_shared<HighPassFilterEffect>(2000));
+    pipeline.effects.push_back(std::make_shared<DitherEffect>(0.0125));
+    pipeline.quantizer = std::make_shared<TrellisQuantizer>();
+    return pipeline;
+  }
 };
 
-// Default Pipeline Factory: Normalize -> Gentle Saturation -> Delta-Sigma
-inline static AudioPipeline CreateDefaultPipeline()
-{
-  AudioPipeline pipeline;
-  pipeline.effects.push_back(std::make_shared<NormalizeEffect>());
-  pipeline.effects.push_back(std::make_shared<SaturateEffect>(2.0));
-  pipeline.quantizer = std::make_shared<TrellisQuantizer>();
-  return pipeline;
-}
+
 
