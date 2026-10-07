@@ -4,9 +4,9 @@
 #define PLUG_VERSION_STR "1.0.0"
 #define PLUG_UNIQUE_ID 'VOBP'
 #define PLUG_MFR_ID 'Vaia'
-#define PLUG_URL_STR "https://iplug2.github.io"
-#define PLUG_EMAIL_STR "vaiaphraim{at}gmail{dot}com"
-#define PLUG_COPYRIGHT_STR "Copyright 2024 Vaia"
+#define PLUG_URL_STR "https://vaiavgm.bandcamp.com/"
+#define PLUG_EMAIL_STR "addqcbr0n@mozmail.com"
+#define PLUG_COPYRIGHT_STR "Vaia (c) 2026"
 #define PLUG_CLASS_NAME VaiaOneBitPlus
 
 #define BUNDLE_NAME "OneBitPlus"
@@ -35,9 +35,9 @@
 #define AUV2_VIEW_CLASS OneBitPlus_View
 #define AUV2_VIEW_CLASS_STR "OneBitPlus_View"
 
-#define AAX_TYPE_IDS 'IPI1', 'IPI2'
+#define AAX_TYPE_IDS 'VOB1', 'VOB2'
 #define AAX_PLUG_MFR_STR "Vaia"
-#define AAX_PLUG_NAME_STR "OneBitPlus\nIPIS"
+#define AAX_PLUG_NAME_STR "OneBitPlus\nVOBP"
 #define AAX_DOES_AUDIOSUITE 0
 #define AAX_PLUG_CATEGORY_STR "Synth"
 

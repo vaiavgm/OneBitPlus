@@ -1,4 +1,6 @@
 echo off
+REM - release/installer builds must not carry the DEV build tag (see VaiaBuildTag.h)
+set VAIA_RELEASE=1
 
 REM - batch file to build MSVS project and zip the resulting binaries (or make installer)
 REM - updating version numbers requires python and python path added to %PATH% env variable 

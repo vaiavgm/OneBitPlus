@@ -4,6 +4,7 @@
     <IPLUG2_ROOT>$(ProjectDir)..\..\..</IPLUG2_ROOT>
     <BINARY_NAME>VaiaOneBitPlus</BINARY_NAME>
     <EXTRA_ALL_DEFS>IGRAPHICS_NANOVG;IGRAPHICS_GL2</EXTRA_ALL_DEFS>
+    <EXTRA_ALL_DEFS Condition="'$(VAIA_RELEASE)'==''">$(EXTRA_ALL_DEFS);VAIA_DEV_BUILD</EXTRA_ALL_DEFS>
     <EXTRA_DEBUG_DEFS />
     <EXTRA_RELEASE_DEFS />
     <EXTRA_TRACER_DEFS />
@@ -60,4 +61,8 @@
       <Value>$(CREATE_BUNDLE_SCRIPT)</Value>
     </BuildMacro>
   </ItemGroup>
+  <!-- Keeps PLUG_VERSION_HEX, the copyright year and resources\main.rc in step with PLUG_VERSION_STR (STR wins). -->
+  <Target Name="VaiaSyncVersion" BeforeTargets="PrepareForBuild" Condition="Exists('$(SolutionDir)scripts\sync_version.py')">
+    <Exec Command="python &quot;$(SolutionDir)scripts\sync_version.py&quot;" ContinueOnError="true" />
+  </Target>
 </Project>
