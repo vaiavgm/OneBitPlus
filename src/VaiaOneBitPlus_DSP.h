@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include <atomic>
 #include <memory>
 #include <cmath>
 #include <IPlugLogger.h>
@@ -254,7 +255,9 @@ public:
 
       mSampleOsc.Reset();
       auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
-      mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);
+      // The sample is rendered at the host rate it was imported with and plays at that rate. Legacy projects keep
+      // the original behaviour: the rate was never passed on, so every sample played as if it was 44.1 kHz.
+      mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size, mParentDSP.mLegacyTiming.load(std::memory_order_relaxed) ? 44100u : sampleInfo.sampleRate);
       mBankGeneration = sampleInfo.bankGeneration; // keeps the sample bank alive while this voice plays
 
       if (isRetrigger)
@@ -473,6 +476,10 @@ public:
 
   void ProcessBlock(T** inputs, T** outputs, int nOutputs, int nFrames, double qnPos = 0., bool transportIsRunning = false, double tempo = 120.)
   {
+    // Legacy projects: synced LFOs ran at a fixed 120 BPM (the plugin never passed the host tempo on)
+    if (mLegacyTiming.load(std::memory_order_relaxed))
+      tempo = 120.;
+
 
 
     mParamSmoother.ProcessBlock(mParamsToSmooth.data(), mModulations.GetList(), nFrames);
@@ -724,6 +731,10 @@ public:
 
   public:
     OSC_Algorithm algo = used_algo;
+
+    // Keep behaviours of projects saved before the sound changes (see StateFormat.h, ECompat). Written by the
+    // UI / state thread, read by the audio thread.
+    std::atomic<bool> mLegacyTiming{false};
 
     MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
     WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)

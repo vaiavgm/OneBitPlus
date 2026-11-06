@@ -15,6 +15,7 @@
 #include "src/IAudioEffect.h" 
 #include "src/IQuantizer.h"
 #include "src/SampleImportWorker.h"
+#include "src/StateFormat.h"
 #include "src/DragDropWaveformDisplay.h"
 #include <atomic>
 #include <string.h>
@@ -73,8 +74,9 @@ private:
   };
 
   ImportResult RunImport(const ImportJob& job);
-  // Re-applies saved parameter values so states saved by older versions keep sounding the same.
-  void MigrateParams(uint32_t savedDspVersion);
+  // Makes a loaded state sound like it did when it was saved (see StateFormat.h): converts parameters that
+  // changed meaning, and switches on the compatibility behaviours the old version had.
+  void ApplyMigrations(const OneBitState::Data& data);
   // Shows the most recently imported sample in the drop box and makes it the one to audition.
   void ShowLatestSample();
   // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.

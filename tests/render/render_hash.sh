@@ -11,3 +11,5 @@ clang++ -std=c++20 -O1 -w -DIPLUG_DSP=1 -DAPP_API -include memory -I. -Isrc \
   tests/render/RenderHash.cpp "$IP/IPlug/Extras/Synth/MidiSynth.cpp" "$IP/IPlug/Extras/Synth/VoiceAllocator.cpp" -o "$OUT"
 "$OUT" 48000
 "$OUT" 44100
+"$OUT" 48000 legacy
+"$OUT" 44100 legacy

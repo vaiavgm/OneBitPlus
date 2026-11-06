@@ -3,13 +3,20 @@
 // an FNV-1a hash of the rendered output. A change that should not affect the sound must not change the hash.
 // Build: see tests/render/README.md
 //
-// Reference hashes (sound of main @ 2a93f6b, unchanged through clean-up phases 0-5):
-//   48000 Hz: b0831e9c193fe52f
-//   44100 Hz: b113933603cca5b7
+// Reference: the ORIGINAL code (main @ 2a93f6b), built with -DHOST_TEMPO=120.0 -DONEBIT_NO_LEGACY_API
+// (the original plugin never passed the host tempo on, so 120 BPM is what it effectively used):
+//   48000 Hz: 0bf6817515ca0ac7      44100 Hz: b61090932549d1df
+// The current code rendering "legacy" at HOST_TEMPO 140 must print exactly these. That is the proof that
+// projects loaded in legacy mode keep their sound.
+// Non-legacy hashes change whenever the sound is changed on purpose: update them in the commit that does it.
 #include "VaiaOneBitPlus_DSP.h"
 #include <cstdio>
 #include <vector>
 #include <cstring>
+
+#ifndef HOST_TEMPO
+#define HOST_TEMPO 140.0
+#endif
 using namespace iplug;
 
 static unsigned long long gHash = 1469598103934665603ULL;
@@ -23,6 +30,8 @@ static void HashBuf(const sample* b, int n)
 int main(int argc, char** argv)
 {
   const double sr = argc > 1 ? atof(argv[1]) : 48000.0;
+  // "legacy" renders like a project saved by the original version (see src/StateFormat.h, kCompatLegacyTiming)
+  const bool legacy = argc > 2 && std::strcmp(argv[2], "legacy") == 0;
   const int bs = 256;
   auto* dsp = new OneBitPlusDSP<sample>(32);
   dsp->Reset(sr, bs);
@@ -36,6 +45,9 @@ int main(int argc, char** argv)
     }
   };
   setDefaults();
+#ifndef ONEBIT_NO_LEGACY_API // defined when building against the original code, which has no legacy switch
+  dsp->mLegacyTiming = legacy;
+#endif
   // a characterful patch on types 1 and 3
   dsp->SetParam(kParamPwmAttack1, 120.); dsp->SetParam(kParamPwmDecay1, 300.); dsp->SetParam(kParamPwmSustain1, 40.); dsp->SetParam(kParamPwmRelease1, 200.);
   dsp->SetParam(kParamPwmLFODepth1, 30.); dsp->SetParam(kParamPwmLFORateMode1, 0.); dsp->SetParam(kParamPwmLFORateHz1, 5.);
@@ -44,6 +56,9 @@ int main(int argc, char** argv)
   dsp->SetParam(kParamPitchAttack3, 50.); dsp->SetParam(kParamPitchDecay3, 80.); dsp->SetParam(kParamPitchModPow3, 2.); dsp->SetParam(kParamPitchSustain3, 10.);
   dsp->SetParam(kParamPwmKeyTrack3, 1.); dsp->SetParam(kParamPwmOffset3, 0.2);
   dsp->SetParam(kParamExtraUnison2, 8.); dsp->SetParam(kParamExtraDetune2, 60.);
+  // tempo-synced LFOs on types 2 (pitch) and 4 (PWM), played while the transport runs and after it has stopped
+  dsp->SetParam(kParamPitchLFODepth2, 8.); dsp->SetParam(kParamPitchLFORateMode2, 1.); dsp->SetParam(kParamPitchLFORateTempo2, (double)LFO<>::k16th);
+  dsp->SetParam(kParamPwmLFODepth4, 40.); dsp->SetParam(kParamPwmLFORateMode4, 1.); dsp->SetParam(kParamPwmLFORateTempo4, (double)LFO<>::k32nd);
   // one sample at velocity 1 (sampler note 3)
   std::vector<int8_t> smp(4000); for (size_t i = 0; i < smp.size(); ++i) smp[i] = (int8_t)((i * 37) ^ (i >> 3));
   dsp->mSampleManager.AddSample(smp.data(), smp.size(), (uint32_t)sr);
@@ -54,15 +69,17 @@ int main(int argc, char** argv)
     {12, 3, 0xB0, 1, 64}, {20, 0, 0x80, 60, 0}, {22, 50, 0x90, 0, 90}, {23, 0, 0x90, 1, 40}, {24, 0, 0x90, 2, 120},
     {26, 7, 0x90, 3, 1}, {30, 0, 0xE0, 0, 96}, {35, 0, 0x80, 64, 0}, {36, 0, 0x80, 0, 0}, {36, 1, 0x80, 1, 0}, {36, 2, 0x80, 2, 0},
     {40, 0, 0x80, 67, 0}, {41, 0, 0x80, 48, 0}, {45, 0, 0x80, 3, 0}, {50, 0, 0x90, 72, 127}, {55, 0, 0x80, 72, 0},
-    {60, 0, 0x90, 36, 127}, {60, 0, 0x90, 43, 33}, {90, 0, 0x80, 36, 0}, {90, 0, 0x80, 43, 0}};
+    {60, 0, 0x90, 36, 127}, {60, 0, 0x90, 43, 33}, {90, 0, 0x80, 36, 0}, {90, 0, 0x80, 43, 0},
+    {75, 0, 0x90, 55, 50}, {75, 0, 0x90, 62, 120}, {110, 0, 0x80, 55, 0}, {110, 0, 0x80, 62, 0}};
   std::vector<sample> L(bs), R(bs); sample* outs[2] = {L.data(), R.data()};
   double qn = 0;
   for (int blk = 0; blk < 140; ++blk) {
     for (auto& e : evs) if (e.block == blk) { IMidiMsg m(e.offset, (uint8_t)e.status, (uint8_t)e.note, (uint8_t)e.vel); dsp->ProcessMidiMsg(m); }
     std::memset(L.data(), 0, bs * sizeof(sample)); std::memset(R.data(), 0, bs * sizeof(sample));
-    dsp->ProcessBlock(nullptr, outs, 2, bs, qn, true, 120.);
+    // host tempo (not 120 on purpose); the transport stops halfway so both LFO sync paths are exercised
+    dsp->ProcessBlock(nullptr, outs, 2, bs, qn, blk < 70, HOST_TEMPO);
     qn += bs / sr * 2.0; // 120 bpm
     HashBuf(L.data(), bs); HashBuf(R.data(), bs);
   }
-  std::printf("sr=%.0f hash=%016llx nonzero=%ld\n", sr, gHash, gNonZero);
+  std::printf("sr=%.0f %s hash=%016llx nonzero=%ld\n", sr, legacy ? "legacy" : "new   ", gHash, gNonZero);
 }

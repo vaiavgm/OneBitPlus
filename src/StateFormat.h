@@ -15,10 +15,19 @@
 //      | u32 pathCount | pathCount x {str path, str pipeline}
 //  v2  u32 version=2 | u32 dspVersion | u32 numSlots
 //      | numSlots x {u32 sr, u32 size, size bytes, str path, str pipeline}
+//  v3  u32 version=3 | u32 dspVersion | u32 compatFlags | u32 numSlots | (slots as in v2)
 //
 // dspVersion describes the *sound behaviour* the state was saved with, independent of the container
 // layout. Loading a state with an older dspVersion lets the plugin migrate parameters so that existing
-// projects keep sounding the same (see VaiaOneBitPlus::MigrateParams).
+// projects keep sounding the same (see VaiaOneBitPlus::ApplyMigrations).
+//
+//  dspVersion 1: the original behaviour (also every state without a version: v0, v1, and v2 written by
+//                clean-up builds before the sound changes).
+//  dspVersion 2: audible release, host tempo for synced LFOs, samples at their own rate, pitch keytrack,
+//                DC-blocked output.
+//
+// compatFlags are switches that keep a *behaviour* of an older version for as long as the user wants.
+// They are saved with the project (see ECompat).
 
 #include <cstdint>
 #include <string>
@@ -29,12 +38,19 @@
 namespace OneBitState
 {
 
-constexpr uint32_t kLatestVersion = 2;
+constexpr uint32_t kLatestVersion = 3;
 
-// Sound-behaviour versions:
-//  1 = original behaviour (release stages inaudible, ...)
+// Sound-behaviour versions (see the comment at the top)
 constexpr uint32_t kDspVersionLegacy = 1;
-constexpr uint32_t kLatestDspVersion = 1;
+constexpr uint32_t kLatestDspVersion = 2;
+
+// Behaviours of older versions that a project can keep using
+enum ECompat : uint32_t
+{
+  // Synced LFOs run as if the host tempo was always 120 BPM, and samples play at 44.1 kHz speed
+  // (the original behaviour: tempo and sample rate were not passed on to the DSP).
+  kCompatLegacyTiming = 1u << 0,
+};
 
 // Sanity limits for reading untrusted data.
 constexpr uint32_t kMaxSlots = static_cast<uint32_t>(SampleData::SampleManager::kMaxDynamicSlots);
@@ -45,16 +61,18 @@ struct Data
 {
   uint32_t version = 0;                       // container version that was read (0 = no block)
   uint32_t dspVersion = kDspVersionLegacy;    // sound-behaviour version the state was saved with
+  uint32_t compatFlags = 0;                   // ECompat bits (container v3 and later; 0 for older states)
   std::vector<SampleData::Slot> slots;
   bool valid = true;                          // false if the block was present but corrupt / truncated
 };
 
 template <class Chunk>
-void Write(Chunk& chunk, const std::vector<SampleData::Slot>& slots, uint32_t dspVersion = kLatestDspVersion)
+void Write(Chunk& chunk, const std::vector<SampleData::Slot>& slots, uint32_t dspVersion = kLatestDspVersion, uint32_t compatFlags = 0)
 {
   uint32_t version = kLatestVersion;
   chunk.Put(&version);
   chunk.Put(&dspVersion);
+  chunk.Put(&compatFlags);
 
   uint32_t numSlots = static_cast<uint32_t>(slots.size());
   chunk.Put(&numSlots);
@@ -146,10 +164,14 @@ int Read(const Chunk& chunk, int startPos, Data& out)
       }
     }
   }
-  else if (version == 2)
+  else if (version == 2 || version == 3)
   {
     uint32_t numSlots = 0;
-    if ((pos = chunk.Get(&out.dspVersion, pos)) < 0 || (pos = chunk.Get(&numSlots, pos)) < 0 || numSlots > kMaxSlots)
+    if ((pos = chunk.Get(&out.dspVersion, pos)) < 0)
+      return fail();
+    if (version == 3 && (pos = chunk.Get(&out.compatFlags, pos)) < 0)
+      return fail();
+    if ((pos = chunk.Get(&numSlots, pos)) < 0 || numSlots > kMaxSlots)
       return fail();
     out.slots.resize(numSlots);
     for (auto& slot : out.slots)

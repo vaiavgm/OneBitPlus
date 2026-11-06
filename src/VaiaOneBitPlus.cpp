@@ -10,7 +10,6 @@
 #include "src/SampleLoader.h"
 #include "src/SampleData.h"
 #include "src/PipelinePresets.h"
-#include "src/StateFormat.h"
 #include "src/Debug.h"
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
@@ -270,6 +269,10 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     pGraphics->AttachControl(mDropBox);
 
+    // Switch for projects saved before the sound changes (it is on for them after loading, off for new instances)
+    pGraphics->AttachControl(
+      new IVToggleControl(IRECT(305.0, 500.0, 375.0, 560.0), [this](IControl* pCaller) { mDSP.mLegacyTiming = pCaller->GetValue() > 0.5; }, "Legacy timing", SMALLER_LABEL, "OFF", "ON"), kCtrlTagLegacyTiming);
+
     for (int t = 0; t < kNumTypes; ++t)
       UpdateLfoRateVisibility(t);
     ShowLatestSample(); // restore the waveform when the editor is reopened / after loading state
@@ -282,7 +285,8 @@ bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
 {
   // Parameters first, then the versioned custom block (see src/StateFormat.h)
   bool ok = SerializeParams(chunk);
-  OneBitState::Write(chunk, mDSP.mSampleManager.CopyDynamicSlots());
+  const uint32_t compat = mDSP.mLegacyTiming.load() ? OneBitState::kCompatLegacyTiming : 0u;
+  OneBitState::Write(chunk, mDSP.mSampleManager.CopyDynamicSlots(), OneBitState::kLatestDspVersion, compat);
   return ok;
 }
 
@@ -297,7 +301,7 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
 
   // v0 (no block) and corrupt blocks both end up with no samples, as before
   mDSP.mSampleManager.ReplaceDynamicSamples(std::move(data.slots));
-  MigrateParams(data.dspVersion);
+  ApplyMigrations(data);
 
   // may be called on any host thread: let OnIdle (main thread) refresh the drop box
   mSamplesChanged.store(true);
@@ -305,12 +309,18 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
   return pos;
 }
 
-void VaiaOneBitPlus::MigrateParams(uint32_t savedDspVersion)
+void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
 {
-  // Hook for sound-behaviour migrations. Each step converts params from version N to N+1, e.g.
-  //   if (savedDspVersion < 2) { ... set params so the old sound is reproduced ... }
-  // Nothing to migrate yet (OneBitState::kLatestDspVersion == 1).
-  (void)savedDspVersion;
+  if (data.dspVersion < 2)
+  {
+    // Saved by the original behaviour: keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz speed).
+    // The user can switch this off in the editor.
+    mDSP.mLegacyTiming = true;
+  }
+  else
+  {
+    mDSP.mLegacyTiming = (data.compatFlags & OneBitState::kCompatLegacyTiming) != 0;
+  }
 }
 
 void VaiaOneBitPlus::ShowLatestSample()
@@ -369,7 +379,8 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   memset(outputs[0], 0, nFrames * sizeof(sample));
   memset(outputs[1], 0, nFrames * sizeof(sample));
 
-  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
+  const double tempo = mTimeInfo.mTempo > 0. ? mTimeInfo.mTempo : 120.; // hosts that report no tempo keep the old default
+  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, tempo);
 
   // visualisation only (lock-free, no allocation)
   mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
@@ -393,6 +404,20 @@ void VaiaOneBitPlus::OnIdle()
 
   if (imported)
     ShowLatestSample();
+
+  // keep the legacy-timing switch in sync after a state load
+  if (IGraphics* pGraphics = GetUI())
+  {
+    if (IControl* pToggle = pGraphics->GetControlWithTag(kCtrlTagLegacyTiming))
+    {
+      const double value = mDSP.mLegacyTiming.load() ? 1.0 : 0.0;
+      if (pToggle->GetValue() != value)
+      {
+        pToggle->SetValue(value);
+        pToggle->SetDirty(false);
+      }
+    }
+  }
 
   mMeterSender.TransmitData(*this);
   mScopeSender.TransmitData(*this);

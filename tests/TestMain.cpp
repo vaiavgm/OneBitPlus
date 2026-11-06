@@ -405,12 +405,36 @@ TEST(State_V2RoundTrip)
 
   OneBitState::Data d;
   int pos = OneBitState::Read<FakeStr>(c, 4, d);
-  CHECK(d.valid && d.version == 2 && d.dspVersion == OneBitState::kLatestDspVersion);
+  CHECK(d.valid && d.version == OneBitState::kLatestVersion && d.dspVersion == OneBitState::kLatestDspVersion && d.compatFlags == 0);
   CHECK(d.slots.size() == 2);
   CHECK(d.slots[0].data == std::vector<int8_t>({1, 2, 3}) && d.slots[0].sampleRate == 48000 && d.slots[0].path == "a.wav" && d.slots[0].pipeline == "P1");
   CHECK(d.slots[1].path == "b.wav");
   int readTrailer = 0;
   CHECK(c.Get(&readTrailer, pos) > 0 && readTrailer == 99);
+}
+
+TEST(State_V3CarriesCompatFlags)
+{
+  FakeChunk c;
+  OneBitState::Write(c, {MakeSlot({5}, 44100, "a.wav", "")}, 1, OneBitState::kCompatLegacyTiming);
+  OneBitState::Data d;
+  OneBitState::Read<FakeStr>(c, 0, d);
+  CHECK(d.valid && d.dspVersion == 1 && (d.compatFlags & OneBitState::kCompatLegacyTiming) && d.slots.size() == 1);
+
+  // a v2 block (written by clean-up builds before the sound changes) has no flags and counts as dspVersion 1
+  FakeChunk v2;
+  uint32_t version = 2, dsp = 1, n = 1, sr = 48000, size = 1;
+  v2.Put(&version);
+  v2.Put(&dsp);
+  v2.Put(&n);
+  v2.Put(&sr);
+  v2.Put(&size);
+  int8_t byte = 3;
+  v2.PutBytes(&byte, 1);
+  v2.PutStr("p.wav");
+  v2.PutStr("");
+  OneBitState::Read<FakeStr>(v2, 0, d);
+  CHECK(d.valid && d.version == 2 && d.dspVersion == 1 && d.compatFlags == 0 && d.slots.size() == 1 && d.slots[0].path == "p.wav");
 }
 
 TEST(State_ReadsV1)
