@@ -408,23 +408,29 @@ public:
 
         double noiseThreshold = velocity * (1.0 - mModWheel);
 
-        if (midiNote < 1 && velocity > 0.0)
+        // Notes 0-2 are noise and note 3 is the sampler: all of them stop as soon as the key is released.
+        // Synth notes keep sounding while an envelope is still in its release stage.
+        if (midiNote < 1)
         {
-          ProcessNoise1(outputs, i, noiseThreshold);
+          if (velocity > 0.0)
+            ProcessNoise1(outputs, i, noiseThreshold);
         }
-        else if (midiNote < 2 && velocity > 0.0)
+        else if (midiNote < 2)
         {
-          ProcessNoise2(outputs, i, noiseThreshold, lastClock4, tempNoise4);
+          if (velocity > 0.0)
+            ProcessNoise2(outputs, i, noiseThreshold, lastClock4, tempNoise4);
         }
-        else if (midiNote < 3 && velocity > 0.0)
+        else if (midiNote < 3)
         {
-          ProcessNoise3(outputs, i, noiseThreshold, lastClock8, tempNoise8);
+          if (velocity > 0.0)
+            ProcessNoise3(outputs, i, noiseThreshold, lastClock8, tempNoise8);
         }
-        else if (midiNote < 4 && velocity > 0.0)
+        else if (midiNote < 4)
         {
-          ProcessSampleOscillator(outputs, i, oscFreq, &mSampleOsc);
+          if (velocity > 0.0)
+            ProcessSampleOscillator(outputs, i, oscFreq, &mSampleOsc);
         }
-        else if (velocity > 0.0)
+        else if (velocity > 0.0 || mPwmEnv.GetBusy() || mPitchEnv.GetBusy())
         {
           ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, unison);
         }

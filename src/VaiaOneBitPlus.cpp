@@ -309,6 +309,12 @@ int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
   return pos;
 }
 
+void VaiaOneBitPlus::ResetParam(int paramIdx, double value)
+{
+  GetParam(paramIdx)->Set(value);
+  OnParamChange(paramIdx); // DSP; the editor is refreshed by the host's state restore
+}
+
 void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
 {
   if (data.dspVersion < 2)
@@ -316,6 +322,15 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
     // Saved by the original behaviour: keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz speed).
     // The user can switch this off in the editor.
     mDSP.mLegacyTiming = true;
+
+    // The Release stages of both envelopes did nothing before (the voice was cut off at note-off), so whatever
+    // is stored in them was never heard. Reset them to 0, so the sound of the project stays the same now that
+    // release works. (A release of 0 ends within a few samples.)
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      ResetParam(TypeParam(t, kParamPwmRelease1));
+      ResetParam(TypeParam(t, kParamPitchRelease1));
+    }
   }
   else
   {

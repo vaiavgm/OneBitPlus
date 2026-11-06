@@ -77,6 +77,8 @@ private:
   // Makes a loaded state sound like it did when it was saved (see StateFormat.h): converts parameters that
   // changed meaning, and switches on the compatibility behaviours the old version had.
   void ApplyMigrations(const OneBitState::Data& data);
+  // Sets a parameter to a value (used by migrations) and passes it on to the DSP.
+  void ResetParam(int paramIdx, double value = 0.);
   // Shows the most recently imported sample in the drop box and makes it the one to audition.
   void ShowLatestSample();
   // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.

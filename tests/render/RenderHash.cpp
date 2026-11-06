@@ -48,6 +48,7 @@ int main(int argc, char** argv)
 #ifndef ONEBIT_NO_LEGACY_API // defined when building against the original code, which has no legacy switch
   dsp->mLegacyTiming = legacy;
 #endif
+  FILE* dump = argc > 3 ? std::fopen(argv[3], "wb") : nullptr; // optional: raw output (left channel, doubles)
   // a characterful patch on types 1 and 3
   dsp->SetParam(kParamPwmAttack1, 120.); dsp->SetParam(kParamPwmDecay1, 300.); dsp->SetParam(kParamPwmSustain1, 40.); dsp->SetParam(kParamPwmRelease1, 200.);
   dsp->SetParam(kParamPwmLFODepth1, 30.); dsp->SetParam(kParamPwmLFORateMode1, 0.); dsp->SetParam(kParamPwmLFORateHz1, 5.);
@@ -59,6 +60,15 @@ int main(int argc, char** argv)
   // tempo-synced LFOs on types 2 (pitch) and 4 (PWM), played while the transport runs and after it has stopped
   dsp->SetParam(kParamPitchLFODepth2, 8.); dsp->SetParam(kParamPitchLFORateMode2, 1.); dsp->SetParam(kParamPitchLFORateTempo2, (double)LFO<>::k16th);
   dsp->SetParam(kParamPwmLFODepth4, 40.); dsp->SetParam(kParamPwmLFORateMode4, 1.); dsp->SetParam(kParamPwmLFORateTempo4, (double)LFO<>::k32nd);
+  if (legacy) // what VaiaOneBitPlus::ApplyMigrations does for states saved by the original version
+  {
+    for (int t = 0; t < 4; ++t)
+    {
+      dsp->SetParam(TypeParam(t, kParamPwmRelease1), 0.);
+      dsp->SetParam(TypeParam(t, kParamPitchRelease1), 0.);
+    }
+  }
+
   // one sample at velocity 1 (sampler note 3)
   std::vector<int8_t> smp(4000); for (size_t i = 0; i < smp.size(); ++i) smp[i] = (int8_t)((i * 37) ^ (i >> 3));
   dsp->mSampleManager.AddSample(smp.data(), smp.size(), (uint32_t)sr);
@@ -80,6 +90,8 @@ int main(int argc, char** argv)
     dsp->ProcessBlock(nullptr, outs, 2, bs, qn, blk < 70, HOST_TEMPO);
     qn += bs / sr * 2.0; // 120 bpm
     HashBuf(L.data(), bs); HashBuf(R.data(), bs);
+    if (dump) std::fwrite(L.data(), sizeof(sample), bs, dump);
   }
+  if (dump) std::fclose(dump);
   std::printf("sr=%.0f %s hash=%016llx nonzero=%ld\n", sr, legacy ? "legacy" : "new   ", gHash, gNonZero);
 }
