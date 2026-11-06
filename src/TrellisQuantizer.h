@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <cstddef>
 #include <limits>
 #include "src/IQuantizer.h"
 #include "src/Debug.h"
@@ -57,6 +58,27 @@ inline static TrellisConfig SuggestTrellisConfig(size_t totalSamples,
   return {LOW_QUALITY_STATES, true, 4096};
 }
 
+// Flat [time][state] grid that is reused across chunks (one allocation instead of one vector per time step
+// per chunk). trellis[t][s] works like the former std::vector<std::vector<Node>>.
+template <class Node>
+class TrellisGrid
+{
+public:
+  void Reset(size_t rows, int numStates, const Node& init)
+  {
+    mNumStates = static_cast<size_t>(numStates);
+    const size_t needed = rows * mNumStates;
+    if (mNodes.size() < needed)
+      mNodes.resize(needed);
+    std::fill(mNodes.begin(), mNodes.begin() + static_cast<std::ptrdiff_t>(needed), init);
+  }
+  Node* operator[](size_t t) { return mNodes.data() + t * mNumStates; }
+
+private:
+  std::vector<Node> mNodes;
+  size_t mNumStates = 0;
+};
+
 inline static void ApplyTrellisQuantizationChunked(const std::vector<double>& input, std::vector<bool>& outputBits, int numStates = 65, size_t chunkSize = 4096)
 {
   if (input.empty())
@@ -84,13 +106,14 @@ inline static void ApplyTrellisQuantizationChunked(const std::vector<double>& in
 
   // Continuous error accumulator carried over across chunk boundaries
   double initial_error = 0.0;
+  TrellisGrid<Node> trellis;
 
   for (size_t offset = 0; offset < totalSamples; offset += chunkSize)
   {
     const size_t current_chunk = std::min(chunkSize, totalSamples - offset);
 
     // Grid size for current block: [Time step: 0..current_chunk][State Index: 0..numStates-1]
-    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, 0.0, -1, false}));
+    trellis.Reset(current_chunk + 1, numStates, {infinity, 0.0, -1, false});
 
     // Initialize time t = 0 for this chunk using error state from previous chunk
     int start_idx = get_state_index(initial_error);
@@ -188,11 +211,12 @@ inline static void ApplyPsychoacousticTrellis(const std::vector<double>& input, 
 
   // Seed history globally across chunk boundaries
   double g_e1 = 0.0, g_e2 = 0.0, g_e3 = 0.0;
+  TrellisGrid<Node> trellis;
 
   for (size_t offset = 0; offset < input.size(); offset += chunk_size)
   {
     size_t current_chunk = std::min(chunk_size, input.size() - offset);
-    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, -1, false, 0.0, 0.0, 0.0}));
+    trellis.Reset(current_chunk + 1, numStates, {infinity, -1, false, 0.0, 0.0, 0.0});
 
     // Initialize with historical filters carried from the previous chunk
     int start_idx = get_state_index(g_e1);

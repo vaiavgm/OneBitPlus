@@ -18,4 +18,5 @@ A polyphonic **1-bit synth and sampler** plugin (VST3 first) built on **iPlug2**
 - 1-bit sample data is packed **MSB first** everywhere.
 - Primary toolchain is MSVC on Windows. Write portable C++ anyway (no new Win32-only APIs outside `Debug.h`).
 - Unit tests for the pure helpers live in `tests/` ([how to run](docs/BUILD.md#testing)). Add or extend tests when you touch the loader, resampler, quantizers, effects or `BitCompression`.
+- A change that shouldn't affect the sound must keep the render hash identical (`tests/render/`). If a change alters the sound on purpose, update the reference hashes and say so.
 - When you fix an item from [docs/ANALYSIS.md](docs/ANALYSIS.md), strike it or remove it there.

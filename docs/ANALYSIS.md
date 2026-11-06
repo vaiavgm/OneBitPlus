@@ -55,6 +55,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - 🟠 **Pitch Keytrack does nothing.** `pitchKeyTrackStrength` is stored (`:146, :241, :708`) but never read in `ProcessSamplesAccumulating`, so the four "Pitch Keytrack" knobs are dead.
 - 🟡 `midiNote = pitch * 12.0 + 69.1` (`:368`): the `+0.1` is a fudge factor to make the `< 1/2/3/4` comparisons robust. Use the voice's integer key (`mKey`) instead.
 - 🟡 `GetBusy()` returns `false` for the noise/sampler modes, but `mMode` is always set to `kSynth*` in `Trigger`, so the check is dead. The mode is chosen per sample from `midiNote`, not from `mMode`. Decide the voice type once in `Trigger` (the noise/sampler branch can be chosen from `mKey`).
+- 🟡 **Smoothing time ignores the sample rate.** `LogParamSmooth::SetSmoothTime()` is never called, so the gain and sustain smoothers always use the 44.1 kHz coefficients (they smooth faster at higher rates). This is a sound change, so it belongs in Phase 6 🎧.
 - 🟡 Both envelopes are constructed with the name `"gain"` (`:182-183`), which makes debugging confusing.
 - 🟡 `MY_PRINTF` in `Trigger()` (`:249`) runs on the audio thread. Whenever a debugger is attached it calls `snprintf` and `OutputDebugStringA` (a syscall) on every note-on.
 
@@ -133,15 +134,15 @@ Hot path: per sample × per voice (32) × per unison (up to 8).
 
 | # | Sev | Issue | Where | Suggestion |
 |---|---|---|---|---|
-| P1 | 🟠 | `pow(2.0, offsetCents/1200.0)` per unison voice per sample: up to 32 × 8 × fs `pow` calls per second (~12 M/s @ 48 k) | `DSP.h:340` | Precompute the detune ratios when unison or detune change, or once per block |
+| ~~P1~~ ✅ P4 | 🟠 | `pow(2.0, offsetCents/1200.0)` per unison voice per sample: up to 32 × 8 × fs `pow` calls per second (~12 M/s @ 48 k) | `DSP.h:340` | Precompute the detune ratios when unison or detune change, or once per block |
 | P2 | 🟠 | `440 * pow(2.0, …)` per voice per sample | `DSP.h:396` | Only the LFO and envelope terms change per sample. Use `exp2` on the summed exponent, or update per sub-block / control rate (e.g. every 16-32 samples) |
 | P3 | 🟠 | `VaiaOscillator::Process` calls `SetFreqCPS` (a divide) every sample, and its PWM `while` loops are unbounded | `VaiaOscillator.h:29-46` | Pass the increment, and use `floor` for wrapping |
 | P4 | 🟠 | `rand()` in noise voices (CRT lock/TLS, not RT-safe) | `DSP.h:281-308` | Use the per-voice LCG (`Rand()`) |
-| P5 | 🟡 | `mInputs[kVoiceControlTimbre].Write(...)` per voice per block, never read | `DSP.h:370` | Remove |
-| P6 | 🟡 | The param smoother processes all 17 modulation lanes, including the 8 LFO lanes that are immediately overwritten | `DSP.h:507` | Smooth only the gain and sustain lanes |
-| P7 | 🟡 | `SetParam` → `ForEachVoice` + `dynamic_cast` per voice per param change. `OnReset` pushes all 108 params, i.e. 108 × 32 casts | `DSP.h:618-633` | Use `static_cast` (all voices are `Voice`), or keep a typed voice array |
+| ~~P5~~ ✅ P4 | 🟡 | `mInputs[kVoiceControlTimbre].Write(...)` per voice per block, never read | `DSP.h:370` | Remove |
+| ~~P6~~ ✅ P4 | 🟡 | The param smoother processes all 17 modulation lanes, including the 8 LFO lanes that are immediately overwritten | `DSP.h:507` | Smooth only the gain and sustain lanes |
+| ~~P7~~ ✅ P4 | 🟡 | `SetParam` → `ForEachVoice` + `dynamic_cast` per voice per param change. `OnReset` pushes all 108 params, i.e. 108 × 32 casts | `DSP.h:618-633` | Use `static_cast` (all voices are `Voice`), or keep a typed voice array |
 | ~~P8~~ ✅ P3 | 🟡 | 8 LFO members plus 4 hand-written `ProcessBlock`/`SetSampleRate` calls | `DSP.h:507-527, 563-573` | Use `std::array<LFO<T>,4>` loops (also removes duplication) |
-| P9 | 🟠 | Trellis: `std::vector<std::vector<Node>>` is allocated **per 32-sample chunk** (≈1 500 chunks × 33 vectors for 1 s @ 48 k) | `TrellisQuantizer.h:379` | Allocate one flat buffer and reuse it across chunks |
+| ~~P9~~ ✅ P4 | 🟠 | Trellis: `std::vector<std::vector<Node>>` is allocated **per 32-sample chunk** (≈1 500 chunks × 33 vectors for 1 s @ 48 k) | `TrellisQuantizer.h:379` | Allocate one flat buffer and reuse it across chunks |
 | ~~P10~~ ✅ P2 | 🟠 | The whole import runs on the UI thread: read whole file → int32 → Lanczos (2 `sin` per tap, ~7-14 taps) → double → effects → trellis | `VaiaOneBitPlus.cpp:662-680` | Use a worker thread with a progress indicator, and hand the result to the DSP via the bank swap from B3 |
 | P11 | 🟡 | Redundant `int32 ↔ double` conversions (the resampler works in int32, the pipeline in double) | `SampleTools.h:21-128, 194-199` | Convert to double once, after loading |
 | ~~P12~~ ✅ P2 | 🟡 | `ReloadSamples` builds 10 pipelines (with `mt19937` instances) that are never used | `VaiaOneBitPlus.cpp:1047-1134` | Delete them, or move them into a preset table |
@@ -166,7 +167,7 @@ Decisions (from review):
 | 1 | Quick correctness fixes (B1, B5, B7, loader float overflow, BitCompression, PrintBits, README) | no (new imports of full-scale float WAVs are now correct) | ✅ done |
 | 2 | Sample lifecycle: immutable sample bank (B3), keep samples on a rate change (B2), state v2 + migration hook (`dspVersion`, `MigrateParams`), validation, background import. VST2 chunks deliberately left off. | no (keeps samples that used to be lost) | ✅ done |
 | 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ✅ done |
-| 4 | Performance that gives identical output (cached detune ratios, `static_cast`, trellis buffer reuse, no timbre write, no copies) | no | ⏳ |
+| 4 | Performance with bit-identical output: detune ratios once per block, `static_cast`, smoothing only the 9 smoothed lanes, no unused timbre write, trellis grid reuse (~35 % faster import). Added the render regression harness (`tests/render/`), which shows **identical output from `main` through Phase 4**. | no (verified by render hash) | ✅ done |
 | 5 | UI: meter, scope, LFO visualiser, keyboard and pitch wheel | no | ⏳ |
 | 6 🎧 | Sound: B4 sample rate, B8 tempo, B9 release (with migration), B10 DC blocker, noise fixes, PWM wrap, Pitch Keytrack, control-rate pitch | **yes** | waiting for the listening session |
 

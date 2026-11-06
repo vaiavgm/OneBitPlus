@@ -50,7 +50,8 @@ enum EModulations
   kModPwmSustainSmoother3,
   kModPwmSustainSmoother4,
 
-  kModPitchLFO1,
+  kNumSmoothedModulations, // lanes before this are smoothed parameters, lanes after it are LFOs
+  kModPitchLFO1 = kNumSmoothedModulations,
   kModPitchLFO2,
   kModPitchLFO3,
   kModPitchLFO4,
@@ -131,6 +132,7 @@ public:
 
     // Type 1
     std::array<VaiaOscillator<T>, mNumOscPerVoice> mUnisonOsc{}; // up to 8 unisons
+    std::array<double, mNumOscPerVoice> mDetuneRatios{};          // see UpdateDetuneRatios
     ADSREnvelope<T> mPwmEnv{};
     ADSREnvelope<T> mPitchEnv{};
 
@@ -156,7 +158,6 @@ public:
 
 
     OSC_Algorithm algo = used_algo;
-    WDL_TypedBuf<float> mTimbreBuffer;
     double mModWheel{0.0};
 
 
@@ -333,14 +334,24 @@ public:
       }
     }
 
-    inline void ProcessStandardOscillators(T** outputs, int i, double oscFreq, double pwmFunc, double velocity, int unison, double detuneRange)
+    // Frequency ratio of each unison oscillator (same formula as before, computed once per block instead of
+    // once per sample per oscillator).
+    void UpdateDetuneRatios(int unison, double detuneRange)
+    {
+      for (int u = 0; u < unison; ++u)
+      {
+        double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
+        mDetuneRatios[u] = pow(2.0, offsetCents / 1200.0);
+      }
+    }
+
+    inline void ProcessStandardOscillators(T** outputs, int i, double oscFreq, double pwmFunc, int unison)
     {
       bool anyHigh = false;
 
       for (int u = 0; u < unison; ++u)
       {
-        double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
-        double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
+        double freq = oscFreq * mDetuneRatios[u];
 
         auto& unisonOsc = mUnisonOsc[u];
         unisonOsc.SetPWM(pwmFunc);
@@ -370,13 +381,12 @@ public:
 
       double midiNote = (pitch * 12.0) + 69.1;
 
-      mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
 
 
 
-      int unison = std::clamp(extraUnisonCount, 1, 8);
-      double detuneRange = extraDetuneCents;
+      int unison = std::clamp(extraUnisonCount, 1, static_cast<int>(mNumOscPerVoice));
+      UpdateDetuneRatios(unison, extraDetuneCents);
 
       double tempNoise4 = 0.0;
       double tempNoise8 = 0.0;
@@ -413,7 +423,7 @@ public:
         }
         else if (velocity > 0.0)
         {
-          ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, velocity, unison, detuneRange);
+          ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, unison);
         }
       }
     }
@@ -429,7 +439,6 @@ public:
       mPitchEnv.SetSampleRate(sampleRate);
       mPwmEnv.SetSampleRate(sampleRate);
 
-      mTimbreBuffer.Resize(blockSize);
     }
 
     // this is called by the VoiceAllocator to set generic control values.
@@ -576,7 +585,7 @@ public:
       // Helper to apply parameter updates to all matching active voices
       auto ApplyToVoice = [this, targetMode](auto&& fn) {
         mSynth.ForEachVoice([&](SynthVoice& synthVoice) {
-          auto& voice = dynamic_cast<OneBitPlusDSP::Voice&>(synthVoice);
+          auto& voice = static_cast<OneBitPlusDSP::Voice&>(synthVoice); // all voices are Voice (see constructor)
           if (voice.mMode == targetMode)
           {
 
@@ -727,7 +736,8 @@ public:
     MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
     WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
     WDL_PtrList<T> mModulations;      // Ptrlist for global modulations
-    LogParamSmooth<T, kNumModulations> mParamSmoother;
+    // Only the gain and sustain lanes are smoothed; the LFO lanes are written by the LFOs.
+    LogParamSmooth<T, kNumSmoothedModulations> mParamSmoother;
     std::array<sample, kNumModulations> mParamsToSmooth{};
     // one pitch and one PWM LFO per instrument type (free running, shared by all voices of that type)
     std::array<LFO<T>, kNumTypes> mPitchLFOs;

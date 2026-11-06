@@ -24,7 +24,15 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/OneB
 g++ -std=c++17 -I. tests/TestMain.cpp -o OneBitPlusTests && ./OneBitPlusTests
 ```
 
-Audio behaviour is still tested by hand, using the REAPER sessions in `ReaperProjects/`.
+### Render regression hash
+
+`tests/render/` renders a fixed patch and MIDI script through the real DSP and iPlug2 synth engine, and prints a hash of the output. Use it to prove that a refactor doesn't change the sound. See [tests/render/README.md](../tests/render/README.md).
+
+```sh
+tests/render/render_hash.sh /path/to/iPlug2
+```
+
+Beyond that, audio is tested by listening, using the REAPER sessions in `ReaperProjects/`.
 
 ## Release scripts
 
