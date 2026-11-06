@@ -1,6 +1,8 @@
 #pragma once
 
 
+#include <memory>
+#include <cmath>
 #include <IPlugLogger.h>
 #include <IPlugMidi.h>
 
@@ -21,7 +23,7 @@
 
 #include "SampleData.h"
 #include "SampleOscillator.h"
-#include "VaiaOneBitPlus.h"
+#include "src/Params.h"
 #include "VaiaOscillator.h"
 
 #include <algorithm>
@@ -370,8 +372,6 @@ public:
       mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
 
-      int velInt = static_cast<int>(std::round(velocity));
-
       // rate-limit debug printing to once every 1024 samples per voice
       /*
       if ((++mDebugSampleCounter % 1024) == 0)
@@ -552,6 +552,9 @@ public:
           outputs[1][s] = 1.0 * smoothedGain;
         }
       }
+      break;
+    default:
+      break;
     }
   }
 
@@ -615,7 +618,7 @@ public:
       const int pitchSustainSmoothers[4] = {kModPitchSustainSmoother1, kModPitchSustainSmoother2, kModPitchSustainSmoother3, kModPitchSustainSmoother4};
 
       // Helper to apply parameter updates to all matching active voices
-      auto ApplyToVoice = [this, targetMode, oscIndex, relParamIdx, paramIdx, value](auto&& fn) {
+      auto ApplyToVoice = [this, targetMode](auto&& fn) {
         mSynth.ForEachVoice([&](SynthVoice& synthVoice) {
           auto& voice = dynamic_cast<OneBitPlusDSP::Voice&>(synthVoice);
           if (voice.mMode == targetMode)

@@ -61,7 +61,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 ### 1.3 Oscillators
 
 - 🟠 **`VaiaOscillator` PWM edge cases** (`VaiaOscillator.h:39-46`): `pwm == 1.0` exactly isn't wrapped, so the output is DC high. The `while` loops step by 1 per iteration: with key-tracking (`pwm * f/440`) at high notes and `PWM Mod` up to ±2 this can be dozens of iterations per sample per unison voice. Use `pwm - std::floor(pwm)`. PWM wrapping also produces audible jumps from wide to narrow. Decide whether that's a feature (fold or clamp otherwise).
-- 🟡 `mPhase` is used unqualified inside a class template derived from a dependent base (`:34`). This only compiles with MSVC permissive. Use `this->mPhase`.
+- ~~🟡 `mPhase` is used unqualified inside a class template derived from a dependent base (`:34`). This only compiles with MSVC permissive. Use `this->mPhase`.~~ ✅ fixed in Phase 0
 - 🟡 `int temp = squareLookup[pos % 2];` then `return temp;`: a needless `double → int → T` round-trip.
 - 🟡 Output conventions differ: `VaiaOscillator` returns ±1, `SampleOscillator` returns 0/1.
 
@@ -74,8 +74,8 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - 🟡 `SampleTools::Normalize` takes `std::abs(INT32_MIN)`, which is UB. `SampleTools::Saturate` converts `tanh(..)*2^31` to `int32`, which overflows. Both functions, and `SampleTools::LowPassFilter`, are **unused** duplicates of the `IAudioEffect` classes. Delete them.
 - 🟡 `BiquadFilterEffect` cascades identical Q = 0.707 sections (`IAudioEffect.h:303`). That is not a Butterworth response for order > 2 (it is −6 dB at fc for order 4, etc.). Use the per-stage Butterworth Q values.
 - 🟡 `snarePipeline2` (HP 400 Hz → LP 100 Hz) is effectively a null filter. It is unused, but the presets in `ReloadSamples` are worth reviewing before re-enabling them.
-- 🟡 Missing includes: `IAudioEffect.h` uses `std::clamp`/`std::pow`/`std::tanh` without `<algorithm>`/`<cmath>`. `TrellisQuantizer.h` uses `std::numeric_limits` without `<limits>`. There is a circular include `IAudioEffect.h ↔ TrellisQuantizer.h`, and `TrellisQuantizer.h` doesn't need `IAudioEffect.h`.
-- 🟡 `RawQuantizer`/`DeltaSigmaQuantizer`: unused `quantized`/`error` locals, and `ToString()` is missing `override`.
+- ~~🟡 Missing includes: `IAudioEffect.h` uses `std::clamp`/`std::pow`/`std::tanh` without `<algorithm>`/`<cmath>`. `TrellisQuantizer.h` uses `std::numeric_limits` without `<limits>`. There is a circular include `IAudioEffect.h ↔ TrellisQuantizer.h`, and `TrellisQuantizer.h` doesn't need `IAudioEffect.h`.~~ ✅ fixed in Phase 0
+- ~~🟡 `RawQuantizer`/`DeltaSigmaQuantizer`: unused `quantized`/`error` locals, and `ToString()` is missing `override`.~~ ✅ fixed in Phase 0
 
 ### 1.5 Quantizer (`TrellisQuantizer.h`)
 
@@ -120,8 +120,8 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 | UI | The layout is hand-copied 4× (~370 lines). The three `IVStyle`s differ only in font sizes. |
 | Config | Template leftovers: `PLUG_URL_STR` (iplug2.github.io), `AAX_TYPE_IDS 'IPI1','IPI2'` (collide with every other iPlug2 template plugin), `AAX_PLUG_NAME_STR "OneBitPlus\nIPIS"`, placeholder `changelog.txt`/`known-issues.txt`. |
 | Config | `PLUG_CHANNEL_IO "2-2"` on an instrument (`PLUG_TYPE 1`). It should be `"0-2"`: the inputs are never used, and hosts may treat it as an effect. |
-| Portability | Effectively **Windows/MSVC only**. `Debug.h` declares `__declspec(dllimport)` Win32 functions unconditionally. `VaiaOscillator.h` includes `<windows.h>` and `<format>`. Code relies on MSVC permissive mode (`char*` from a literal, unqualified dependent-base members, `EParams` used in `VaiaOneBitPlus_DSP.h` before it is declared because of the circular include with `VaiaOneBitPlus.h`). The macOS/iOS/web project files exist but almost certainly don't build, and the macOS Xcode project doesn't list most `src/` headers. VST3 Debug is `stdcpp17` while Release is `stdcpp20` (`<format>` needs C++20). |
-| Tests | No tests at all. The quantizers, loader, resampler, `BitCompression` and the velocity mapping are pure functions that are easy to unit-test. |
+| Portability | ✅ *Phase 0: `Debug.h` is guarded with `_WIN32`, `<windows.h>`/`<format>` are gone from `VaiaOscillator.h`, `this->`-qualified members are used, the enums moved to `src/Params.h` (which removes the circular include), unused narrowing `int8_t` arrays were removed, and the sources pass a clang syntax check. Remaining: the macOS/iOS project files still don't list the `src/` headers, and the Debug/Release C++ standard mismatch.* Originally: effectively **Windows/MSVC only**. `Debug.h` declares `__declspec(dllimport)` Win32 functions unconditionally. `VaiaOscillator.h` includes `<windows.h>` and `<format>`. Code relies on MSVC permissive mode (`char*` from a literal, unqualified dependent-base members, `EParams` used in `VaiaOneBitPlus_DSP.h` before it is declared because of the circular include with `VaiaOneBitPlus.h`). The macOS/iOS/web project files exist but almost certainly don't build, and the macOS Xcode project doesn't list most `src/` headers. VST3 Debug is `stdcpp17` while Release is `stdcpp20` (`<format>` needs C++20). |
+| Tests | ~~No tests at all.~~ ✅ Phase 0 added `tests/` (loader, resampler, packing, quantizers, effects, velocity mapping, `BitCompression`). |
 | Docs | The README describes behaviour that doesn't match the code (sample velocity distribution). The manual (`manual/*.tex`) is not checked against the parameters. |
 
 ---
@@ -149,12 +149,28 @@ Hot path: per sample × per voice (32) × per unison (up to 8).
 
 ---
 
-## 4. Suggested clean-up order
+## 4. Agreed clean-up plan & status
 
-1. **Correctness quick wins** (each a few lines): B1, B4, B5, B7, B8, the missing `<limits>`/`<cmath>` includes, the `BitCompression` underflow and `k_bits`.
-2. **Sample lifecycle**: an immutable sample bank with an atomic swap (B3), re-rendering instead of clearing on a rate change (B2), state chunks on, validation in `UnserializeState`, a background import worker.
-3. **Voice semantics**: store the velocity in `Trigger`, decide the voice type from `mKey`, make release audible (B9), a bipolar output or a DC blocker (B10), RT-safe noise, sampler pitch and a one-shot option.
-4. **Dedup and structure**: generate the 4 instrument param blocks and UI rows in loops (`for osc in 0..3`, `paramBase = kParamPwmAttack1 + osc*kParamsPerOsc`), use LFO arrays, delete the dead code (`SampleTools` helpers, the unused trellis variants, `IScrollContainer`, `kMyString`, the commented-out imports).
-5. **Performance**: P1-P3 (control-rate pitch, cached detune ratios), P9.
-6. **Portability and release hygiene**: guard `Debug.h` with `#ifdef _WIN32`, drop `<windows.h>`/`<format>` from `VaiaOscillator.h`, fix the template IDs and URLs, `PLUG_CHANNEL_IO "0-2"`, unique param names.
-7. **Tests**: a small header-only test target for the loader, resampler, quantizers and velocity mapping.
+Decisions (from review):
+- DC: add a DC-blocking filter on the output.
+- Velocity→sample mapping stays **1:1**, so adding samples never shifts existing velocity bands. The README gets fixed instead.
+- The sampler **stops on release**.
+- **Backwards compatibility** first: no ID changes, and old states are migrated when loaded.
+- Wire up the meter, scope and LFO visualiser. They had no on-screen controls before.
+- Changes that keep the sound the same come first. Sound-changing changes (🎧) are batched last, to be checked by listening.
+
+| Phase | Content | Sound change? | Status |
+|---|---|---|---|
+| 0 | Safety net: unit tests, includes and portability, clang syntax check | no | ✅ done |
+| 1 | Quick correctness fixes (B1, B5, B7, loader float overflow, BitCompression, PrintBits, README) | no | ⏳ |
+| 2 | Sample lifecycle: immutable sample bank (B3), re-render on rate change instead of clearing (B2), state v2 + migration layer, validation, background import, VST2 state chunks | no (keeps samples that used to be lost) | ⏳ |
+| 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ⏳ |
+| 4 | Performance that gives identical output (cached detune ratios, `static_cast`, trellis buffer reuse, no timbre write, no copies) | no | ⏳ |
+| 5 | UI: meter, scope, LFO visualiser, keyboard and pitch wheel | no | ⏳ |
+| 6 🎧 | Sound: B4 sample rate, B8 tempo, B9 release (with migration), B10 DC blocker, noise fixes, PWM wrap, Pitch Keytrack, control-rate pitch | **yes** | waiting for the listening session |
+
+## 5. To discuss later
+
+- **A. FX-chain pipeline builder.** A minimal GUI for picking the import effects and quantizer, with their parameters, instead of the hard-coded drop lambda. The chain would be stored per sample (it already is, as a string: `mSamplePipelines`). Needs: an effect factory from that string, and a small list/editor control.
+- **B. Correct note release.** Release stages are currently inaudible (B9). Once release works, existing projects would start sounding different, so state migration resets **all 8 Release params to 0** for states saved before the fix. The fix-era version is v2. "v1" is the current sample-block version, and unversioned or param-only states count as v1. Caveat: hosts that restore by parameter values instead of the state chunk (VST2 without chunks) can't be migrated.
+- Changing `PLUG_CHANNEL_IO` to `"0-2"` and replacing the template AAX/URL IDs: hygiene only, kept as-is for compatibility.

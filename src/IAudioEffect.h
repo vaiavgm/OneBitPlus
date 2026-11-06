@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <memory>
 #include <random>
@@ -48,7 +50,7 @@ public:
   // Optional helper constructor for decibels if you prefer working in dB
   static GainEffect FromDecibels(double dB) { return GainEffect(std::pow(10.0, dB / 20.0)); }
 
-  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
   {
     if (buffer.empty())
       return;
@@ -114,7 +116,7 @@ public:
 class NormalizeEffect : public IAudioEffect
 {
 public:
-  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
   {
     if (buffer.empty())
       return;
@@ -336,7 +338,7 @@ public:
   {
   }
 
-  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
   {
     if (buffer.empty())
       return;
@@ -363,7 +365,7 @@ public:
   {
   }
 
-  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
   {
     if (buffer.empty())
       return;
@@ -456,7 +458,7 @@ public:
   {
   }
 
-  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
   {
     if (buffer.empty())
       return;

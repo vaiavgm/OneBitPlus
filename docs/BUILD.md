@@ -9,14 +9,22 @@
 
 | Target | Status |
 |---|---|
-| Windows VST3 (`VaiaOneBitPlus.sln` → `VaiaOneBitPlus-vst3`) | Main and maintained target. Release builds with C++20. Debug is set to C++17, but `VaiaOscillator.h` includes `<format>`. |
+| Windows VST3 (`VaiaOneBitPlus.sln` → `VaiaOneBitPlus-vst3`) | Main and maintained target. Debug x64 is set to C++17 and Release x64 to C++20. The code needs C++17. |
 | Windows APP / VST2 / AAX | Project files exist. VST2 doesn't save custom state (`PLUG_DOES_STATE_CHUNKS 0`). |
-| macOS / iOS / Web | Template project files only. Not buildable as-is: the code uses Win32 APIs (`Debug.h`, `<windows.h>`) and relies on MSVC permissive mode. See [ANALYSIS.md › Gaps › Portability](ANALYSIS.md#2-gaps-missing-or-half-implemented-features). |
+| macOS / iOS / Web | Template project files only. The sources are now portable C++ (they pass a clang syntax check), but the Xcode projects don't list the `src/` headers yet, and nobody has built them. See [ANALYSIS.md › Gaps › Portability](ANALYSIS.md#2-gaps-missing-or-half-implemented-features). |
 | `CompressionAnalyzer/` | Standalone Win32 console + GDI tool (`CompressionAnalyzer.vcxproj`). |
 
 ## Testing
 
-There is no automated test suite. Manual testing uses the REAPER sessions in `ReaperProjects/`.
+`tests/` holds a standalone unit-test executable for the iPlug2-independent helpers: the WAV loader, resampler, bit packing, quantizers, effects, `SampleManager` and `BitCompression`. It has no dependencies and works with any C++17 compiler:
+
+```sh
+cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/OneBitPlusTests
+# or, from the repo root:
+g++ -std=c++17 -I. tests/TestMain.cpp -o OneBitPlusTests && ./OneBitPlusTests
+```
+
+Audio behaviour is still tested by hand, using the REAPER sessions in `ReaperProjects/`.
 
 ## Release scripts
 

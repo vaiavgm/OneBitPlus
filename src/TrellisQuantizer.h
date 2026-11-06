@@ -2,7 +2,8 @@
 
 #include <vector>
 #include <algorithm>
-#include "src/IAudioEffect.h"
+#include <cstdio>
+#include <limits>
 #include "src/IQuantizer.h"
 #include "src/Debug.h"
 
@@ -464,9 +465,9 @@ public:
   {
   }
 
-  std::string ToString() const { char buf[128]; snprintf(buf, sizeof(buf), "TrellisQuantizer(maxRam=%zu)", m_maxRamBytes); return std::string(buf); }
+  std::string ToString() const override { char buf[128]; snprintf(buf, sizeof(buf), "TrellisQuantizer(maxRam=%zu)", m_maxRamBytes); return std::string(buf); }
 
-  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t sampleRate) override
+  std::vector<bool> Quantize(const std::vector<double>& input, [[maybe_unused]] uint32_t sampleRate) override
   {
     if (input.empty())
       return {};
@@ -480,7 +481,7 @@ public:
     constexpr size_t bytesPerNode = 24;
     size_t totalNodesAllocated = config.useChunking ? (config.chunkSize + 1) * config.numStates : (totalBits + 1) * config.numStates;
 
-    double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
+    [[maybe_unused]] double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
 
     MY_PRINTF("=== [Trellis Quantizer Debug] ===\n");
     MY_PRINTF("  Input Samples : %zu (%.2f sec)\n", totalBits, static_cast<double>(totalBits) / sampleRate);

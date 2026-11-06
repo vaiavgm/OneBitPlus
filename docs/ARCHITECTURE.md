@@ -7,6 +7,7 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | File | Role |
 |---|---|
 | `config.h` | iPlug2 plugin metadata (name, IDs, channel I/O, UI size). |
+| `Params.h` | `EParams` and `EControlTags` enums, shared by the plugin and the DSP. |
 | `VaiaOneBitPlus.h/.cpp` | The `Plugin` subclass: parameter definitions (`EParams`), GUI layout (`mLayoutFunc`), state (de)serialization, MIDI routing, sample import (drag & drop). |
 | `VaiaOneBitPlus_DSP.h` | `OneBitPlusDSP<T>`: the voice class, the `MidiSynth` with 32 voices, 8 LFOs, param smoothers, the output stage, `SetParam` routing. |
 | `VaiaOscillator.h` | Pulse/PWM oscillator (`IOscillator<T>`), ±1 output. |
@@ -21,7 +22,7 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | `IScrollContainer.h` | Scrollable text container (currently unused). |
 | `Debug.h` | `MY_PRINTF` → `OutputDebugStringA` (Windows only). |
 
-Other top-level folders: `CompressionAnalyzer/` (a Win32 console + GDI tool that graphs compression rates), `projects/` + `config/` (IDE projects per format), `installer/`, `manual/`, `resources/`, `scripts/` (iPlug2 template build/dist scripts), `ReaperProjects/` (test sessions).
+Other top-level folders: `tests/` (standalone unit tests, see [BUILD.md](BUILD.md#testing)), `CompressionAnalyzer/` (a Win32 console + GDI tool that graphs compression rates), `projects/` + `config/` (IDE projects per format), `installer/`, `manual/`, `resources/`, `scripts/` (iPlug2 template build/dist scripts), `ReaperProjects/` (test sessions).
 
 ## Signal flow
 
