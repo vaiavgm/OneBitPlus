@@ -9,6 +9,7 @@
 
 #include "src/SampleLoader.h"
 #include "src/SampleData.h"
+#include <IPlugPaths.h>
 #include "src/PipelinePresets.h"
 #include "src/Debug.h"
 
@@ -59,6 +60,16 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     P(kParamPitchKeyTrack1)->InitDouble(N("Pitch Keytrack").c_str(), 0.0, -2.0, 2.0, 0.05);
     P(kParamExtraUnison1)->InitInt(N("Extra Unison").c_str(), 1, 1, 8);
     P(kParamExtraDetune1)->InitDouble(N("Extra Detune").c_str(), 0.0, 0.0, 100.0, 0.5);
+  }
+
+  // Chain presets: saved per user (e.g. %APPDATA%/Vaiaphraim/OneBitPlus/Presets), plus a read-only shared folder
+  // (e.g. C:/ProgramData/Vaiaphraim/OneBitPlus/Presets) that an installer can fill.
+  {
+    WDL_String userBase, sharedBase;
+    AppSupportPath(userBase, false);
+    AppSupportPath(sharedBase, true);
+    const std::filesystem::path sub = std::filesystem::path(PLUG_MFR) / PLUG_NAME / "Presets";
+    mPresets = ChainPresets::Store(std::filesystem::path(userBase.Get()) / sub, {std::filesystem::path(sharedBase.Get()) / sub});
   }
 
   using namespace igraphics;
@@ -235,38 +246,17 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     mDropBox = new DragDropWaveformDisplay(
       dropBoxRect,
-      // --- 1. THE DROP CALLBACK ---
+      // --- 1. THE DROP CALLBACK: into the first free slot ---
       [this](const char* filePath) {
-        if (!filePath)
-          return;
-
-        // Render on the background worker; OnIdle() picks up the result and updates the drop box.
-        ImportJob job;
-        job.path = filePath;
-        job.sampleRate = static_cast<uint32_t>(GetSampleRate());
-        job.algo = ResampleAlgo::Lanczos;
-        job.pipeline = PipelinePresets::DropBox();
-        job.printBits = true;
-        mImportWorker.Enqueue(std::move(job));
+        if (filePath)
+          ImportFile(filePath, -1);
       },
 
-      // --- 2. MOUSE DOWN (Note On): audition the last dropped sample ---
-      [this]() {
-        if (mPreviewVelocity <= 0)
-          return;
-        IMidiMsg msg;
-        msg.MakeNoteOnMsg(kSamplerNote, mPreviewVelocity, 0);
-        SendMidiMsgFromUI(msg); // UI -> DSP (SendMidiMsg would go to the host's MIDI out)
-      },
+      // --- 2. MOUSE DOWN (Note On): audition the selected (or last) sample ---
+      [this]() { SendAudition(true); },
 
       // --- 3. MOUSE UP (Note Off) ---
-      [this]() {
-        if (mPreviewVelocity <= 0)
-          return;
-        IMidiMsg msg;
-        msg.MakeNoteOffMsg(kSamplerNote, 0, 0);
-        SendMidiMsgFromUI(msg);
-      });
+      [this]() { SendAudition(false); });
 
     pGraphics->AttachControl(mDropBox);
 
@@ -277,9 +267,28 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(
       new IVToggleControl(IRECT(305.0, 500.0, 375.0, 560.0), [this](IControl* pCaller) { mDSP.mLegacyTiming = pCaller->GetValue() > 0.5; }, "Legacy timing", SMALLER_LABEL, "OFF", "ON"), kCtrlTagLegacyTiming);
 
+    //////////////// SAMPLES PAGE (a tab over the instrument rows; the keyboard below stays visible)
+    SamplesPanel::Callbacks cb;
+    cb.slotInfo = [this](int slot) { return SlotInfoFor(slot); };
+    cb.select = [this](int slot) { SelectSlot(slot); };
+    cb.audition = [this](bool down) { SendAudition(down); };
+    cb.clearSlot = [this]() { ClearSelectedSlot(); };
+    cb.revert = [this]() { RevertSelectedSlot(); };
+    cb.setEmbed = [this](bool embed) { SetEmbedSource(embed); };
+    cb.locate = [this](const std::string& path) { LocateSource(path); };
+    cb.dropFile = [this](const std::string& path) {
+      // a WAV dropped on the page goes into the selected slot if that is free, otherwise into the first free one
+      const int selected = mSamplesModel.Selected();
+      ImportFile(path, selected >= 0 && !mSamplesModel.HasSample() ? selected : -1);
+    };
+    mSamplesPanel = new SamplesPanel(IRECT(SamplesLayout::kPanel.l, SamplesLayout::kPanel.t, SamplesLayout::kPanel.r, SamplesLayout::kPanel.b), mSamplesModel, mPresets, std::move(cb));
+    pGraphics->AttachControl(mSamplesPanel, kCtrlTagSamplesPanel)->Hide(true);
+    pGraphics->AttachControl(
+      new IVToggleControl(IRECT(5.0, 0.0, 160.0, 24.0), [this](IControl* pCaller) { SetSamplesPageOpen(pCaller->GetValue() > 0.5); }, "", SMALLER_LABEL.WithShowLabel(false), "Samples", "Samples (open)"), kCtrlTagSamplesTab);
+
     for (int t = 0; t < kNumTypes; ++t)
       UpdateLfoRateVisibility(t);
-    ShowLatestSample(); // restore the waveform when the editor is reopened / after loading state
+    SelectSlot(mSamplesModel.Selected()); // restore selection and waveform when the editor is reopened
   };
 
 #endif
@@ -350,22 +359,228 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
     ResetParam(kParamSamplerPitch, 0.);
 }
 
-void VaiaOneBitPlus::ShowLatestSample()
+SamplesLayout::SlotInfo VaiaOneBitPlus::SlotInfoFor(int slot) const
 {
-  const size_t count = mDSP.mSampleManager.DynamicCount();
-  if (count == 0)
+  SamplesLayout::SlotInfo info;
+  const auto s = mDSP.mSampleManager.GetSlot(slot);
+  if (s && !s->Empty())
+  {
+    info.used = true;
+    info.name = SamplesLayout::BaseName(s->path);
+    info.bytes = s->data.size();
+  }
+  return info;
+}
+
+void VaiaOneBitPlus::SelectSlot(int slot)
+{
+  if (slot != mSamplesModel.Selected())
+    ++mSlotGeneration; // drop renders that are still running for the slot we are leaving
+
+  const auto s = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  std::error_code ec;
+  const bool fileExists = s && !s->path.empty() && std::filesystem::exists(std::filesystem::path(s->path), ec);
+  mSamplesModel.Select(slot, s, fileExists);
+
+  // what is stored can be shown without the source: the spectrogram and waveform of the 1-bit data
+  if (s && !s->Empty())
+    mSamplesModel.SetPreview(SamplesModel::MakePreview(s->data, {}, s->sampleRate));
+  RefreshDropBox();
+  if (mSamplesPanel)
+    mSamplesPanel->SetDirty(false);
+}
+
+void VaiaOneBitPlus::RefreshDropBox()
+{
+  // the drop box and the audition button follow the selected sample, or the last one if none is selected
+  int index = mSamplesModel.HasSample() ? mSamplesModel.Selected() : -1;
+  if (index < 0)
+    for (int i = static_cast<int>(mDSP.mSampleManager.DynamicCount()) - 1; i >= 0; --i)
+      if (const auto s = mDSP.mSampleManager.GetSlot(i); s && !s->Empty())
+      {
+        index = i;
+        break;
+      }
+
+  if (index < 0)
   {
     mPreviewVelocity = 0;
     if (mDropBox)
       mDropBox->SetWaveformData({});
     return;
   }
-
-  const int index = static_cast<int>(count) - 1;
   // dynamic slot i is played by velocity kPreparedCount + 1 + i (1:1 mapping, see SampleManager)
   mPreviewVelocity = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + index;
   if (mDropBox)
     mDropBox->SetWaveformData(mDSP.mSampleManager.GetDynamicSampleData(index));
+}
+
+void VaiaOneBitPlus::SendAudition(bool down)
+{
+  if (mPreviewVelocity <= 0)
+    return;
+  IMidiMsg msg;
+  if (down)
+    msg.MakeNoteOnMsg(kSamplerNote, mPreviewVelocity, 0);
+  else
+    msg.MakeNoteOffMsg(kSamplerNote, 0, 0);
+  SendMidiMsgFromUI(msg); // UI -> DSP (SendMidiMsg would go to the host's MIDI out)
+}
+
+void VaiaOneBitPlus::SetSamplesPageOpen(bool open)
+{
+  IGraphics* pGraphics = GetUI();
+  if (!pGraphics)
+    return;
+  if (IControl* panel = pGraphics->GetControlWithTag(kCtrlTagSamplesPanel))
+    panel->Hide(!open);
+
+  // The meter, scope and LFO displays under the page are redrawn all the time: hide them while it covers them,
+  // or the page would be redrawn with them.
+  auto hide = [&](int tag) {
+    if (IControl* c = pGraphics->GetControlWithTag(tag))
+      c->Hide(open);
+  };
+  hide(kCtrlTagMeter);
+  hide(kCtrlTagScope);
+  for (int tag = kCtrlTagLFOVisFirst; tag <= kCtrlTagLFOVisLast; ++tag)
+    hide(tag);
+  pGraphics->SetAllControlsDirty();
+}
+
+void VaiaOneBitPlus::ClearSelectedSlot()
+{
+  const int slot = mSamplesModel.Selected();
+  if (slot < 0)
+    return;
+  ++mSlotGeneration;
+  mDSP.mSampleManager.ClearSlot(slot);
+  SelectSlot(slot);
+}
+
+void VaiaOneBitPlus::RevertSelectedSlot()
+{
+  const int slot = mSamplesModel.Selected();
+  const auto original = mSamplesModel.Original();
+  if (slot < 0 || !original)
+    return;
+  ++mSlotGeneration;
+  mDSP.mSampleManager.SetSlot(slot, *original);
+  SelectSlot(slot);
+}
+
+void VaiaOneBitPlus::SetEmbedSource(bool embed)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty())
+    return;
+
+  SampleData::Slot copy = *current;
+  copy.embedSource = embed;
+  mDSP.mSampleManager.SetSlot(slot, std::move(copy));
+  mSamplesModel.SetEmbed(embed);
+
+  // to embed the source it has to be in memory: render once (same chain, same result) to load it
+  if (embed && !current->source)
+    EnqueueRender(true);
+}
+
+void VaiaOneBitPlus::LocateSource(const std::string& path)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty() || !SampleRender::LoadSourceFile(path))
+  {
+    mSamplesModel.SetMessage("That file can't be read as a WAV.");
+    return;
+  }
+  SampleData::Slot copy = *current;
+  copy.path = path;
+  copy.source = nullptr; // read from the new file when needed
+  mDSP.mSampleManager.SetSlot(slot, std::move(copy));
+  SelectSlot(slot);
+  mSamplesModel.SetMessage("Source file found.");
+}
+
+// Render the selected slot again with the chain being edited (on the worker).
+void VaiaOneBitPlus::EnqueueRender(bool loadSourceOnly)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty())
+    return;
+
+  SampleJob job;
+  job.kind = SampleJob::Kind::Render;
+  job.slot = slot;
+  job.path = current->path;
+  job.source = current->source;
+  job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+  job.chain = mSamplesModel.Chain();
+  job.generation = mSlotGeneration.load();
+  (void)loadSourceOnly; // same job: loading the source is part of every render that doesn't have it yet
+  mSamplesModel.RenderStarted();
+  mImportWorker.Enqueue(std::move(job));
+}
+
+void VaiaOneBitPlus::HandleJobResults()
+{
+  for (auto& result : mImportWorker.TakeResults())
+  {
+    if (result.stale)
+      continue;
+    const bool isSelected = result.slot == mSamplesModel.Selected();
+    switch (result.kind)
+    {
+    case SampleJob::Kind::Import:
+      if (result.ok)
+      {
+        SelectSlot(result.slot);
+        mSamplesModel.SetPreview(std::move(result.preview));
+        mSamplesModel.SetMessage("Imported.");
+        if (mSamplesPanel)
+          mSamplesPanel->ScrollToSlot(result.slot);
+      }
+      else
+      {
+        mSamplesModel.SetMessage(result.error);
+      }
+      break;
+
+    case SampleJob::Kind::Render:
+      if (!isSelected)
+        break;
+      mSamplesModel.RenderFinished(result.ok ? "" : result.error);
+      if (result.ok)
+      {
+        mSamplesModel.SetPreview(std::move(result.preview));
+        mSamplesModel.SetStatus(SamplesModel::SourceStatus::InMemory);
+        RefreshDropBox();
+      }
+      else if (result.sourceMissing)
+      {
+        mSamplesModel.SetStatus(SamplesModel::SourceStatus::Missing);
+      }
+      break;
+
+    case SampleJob::Kind::AutoDc:
+      if (!isSelected)
+        break;
+      if (result.ok)
+      {
+        mSamplesModel.SetParam(result.dcStage, 0, result.dcOffset, SamplesPanel::NowMs()); // re-renders with it
+        char text[64];
+        std::snprintf(text, sizeof(text), "DC offset set to %.3f", result.dcOffset);
+        mSamplesModel.SetMessage(text);
+      }
+      else
+      {
+        mSamplesModel.SetMessage(result.error);
+      }
+      break;
+    }
+  }
 }
 
 void VaiaOneBitPlus::OnParamChangeUI(int paramIdx, EParamSource source)
@@ -396,6 +611,7 @@ void VaiaOneBitPlus::UpdateLfoRateVisibility(int type)
 void VaiaOneBitPlus::OnUIClose()
 {
   mDropBox = nullptr; // IGraphics deletes its controls when the editor closes
+  mSamplesPanel = nullptr;
   Plugin::OnUIClose();
 }
 
@@ -421,16 +637,37 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
 
 void VaiaOneBitPlus::OnIdle()
 {
-  // Main thread: pick up finished background imports
-  bool imported = false;
-  for (const auto& result : mImportWorker.TakeResults())
-    imported |= (result.index >= 0);
+  // Main thread: pick up finished background renders
+  HandleJobResults();
 
+  // a state was loaded (host thread): the slots may all be different now
   if (mSamplesChanged.exchange(false))
-    imported = true;
+    SelectSlot(mSamplesModel.Selected());
 
-  if (imported)
-    ShowLatestSample();
+  // start the background work the page asked for
+  if (mSamplesModel.Selected() >= 0)
+  {
+    const int dcStage = mSamplesModel.TakePendingAutoDc();
+    if (dcStage >= 0)
+    {
+      const auto current = mDSP.mSampleManager.GetSlot(mSamplesModel.Selected());
+      if (current && !current->Empty())
+      {
+        SampleJob job;
+        job.kind = SampleJob::Kind::AutoDc;
+        job.slot = mSamplesModel.Selected();
+        job.path = current->path;
+        job.source = current->source;
+        job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+        job.chain = mSamplesModel.Chain();
+        job.dcStage = static_cast<size_t>(dcStage);
+        mSamplesModel.SetMessage("Searching for the DC offset with the least DC...");
+        mImportWorker.Enqueue(std::move(job));
+      }
+    }
+    if (mSamplesModel.NeedsRender(SamplesPanel::NowMs()))
+      EnqueueRender(false);
+  }
 
   // keep the legacy-timing switch in sync after a state load
   if (IGraphics* pGraphics = GetUI())
@@ -507,46 +744,20 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
 }
 
 
-int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline, bool printBits)
+void VaiaOneBitPlus::ImportFile(const std::string& path, int slot)
 {
-  if (!filePath)
-    return -1;
-
-  ImportJob job;
-  job.path = filePath;
-  job.sampleRate = targetSampleRate;
-  job.algo = resampleAlgo;
-  job.pipeline = pipeline;
-  job.printBits = printBits;
-  return RunImport(job).index;
+  SampleJob job;
+  job.kind = SampleJob::Kind::Import;
+  job.slot = slot;
+  job.path = path;
+  job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+  job.chain = PipelineModel::DefaultChain(); // the former drop-box chain
+  mImportWorker.Enqueue(std::move(job));
 }
 
-VaiaOneBitPlus::ImportResult VaiaOneBitPlus::RunImport(const ImportJob& job)
+VaiaOneBitPlus::SampleJobResult VaiaOneBitPlus::RunJob(const SampleJob& job)
 {
-  ImportResult result;
-
-  SampleLoader loader;
-  LoadedSample rawWav = loader.load_file_static(job.path.c_str());
-  if (rawWav.sampleBuffer.empty())
-    return result;
-
-  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, job.sampleRate, job.algo);
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, job.sampleRate, job.pipeline);
-  if (packed1Bit.empty())
-    return result;
-
-  // AddSample is thread-safe (publishes a new sample bank), so this may run on the worker thread
-  result.index = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), job.sampleRate, job.path, job.pipeline.ToString());
-
-  if (job.printBits)
-    PrintBits(job.path.c_str(), packed1Bit);
-
-  return result;
-}
-
-int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
-{
-  return ImportSample(filePath, targetSampleRate, resampleAlgo, pipeline, /*printBits*/ true);
+  return SampleJobs::Run(mDSP.mSampleManager, mSlotGeneration, job, [this](const std::string& path, const std::vector<int8_t>& bits) { PrintBits(path.c_str(), bits); });
 }
 
 std::string VaiaOneBitPlus::PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit)

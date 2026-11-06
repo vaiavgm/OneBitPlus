@@ -24,6 +24,8 @@
 #include "src/Spectrogram.h"
 #include "src/ChainPresets.h"
 #include "src/SamplesModel.h"
+#include "src/SamplesLayout.h"
+#include "src/SampleJobs.h"
 #include "src/SampleLoader.h"
 #include "src/SampleTools.h"
 
@@ -971,6 +973,313 @@ TEST(SamplesModel_EmbedFlagFollowsTheSlot)
   CHECK(m.Embed());
   m.SetEmbed(false);
   CHECK(!m.Embed() && !m.NeedsRender(99999)); // not an edit of the sound
+}
+
+// ---------------------------------------------------------------- SamplesLayout
+static SamplesLayout::Input LayoutInput(const SamplesModel& m, int first = 0)
+{
+  SamplesLayout::Input in;
+  in.model = &m;
+  in.firstSlot = first;
+  in.slotInfo = [](int slot) {
+    SamplesLayout::SlotInfo i;
+    i.used = slot % 3 != 1;
+    i.name = "C:\\samples\\kick_" + std::to_string(slot) + ".wav";
+    i.name = SamplesLayout::BaseName(i.name);
+    i.bytes = 1000;
+    return i;
+  };
+  return in;
+}
+
+static bool Overlap(const SamplesLayout::Rect& a, const SamplesLayout::Rect& b) { return a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b; }
+
+static void CheckLayoutSane(const std::vector<SamplesLayout::Region>& regions)
+{
+  using namespace SamplesLayout;
+  for (const auto& g : regions)
+  {
+    CHECK(g.r.l >= kPanel.l && g.r.r <= kPanel.r && g.r.t >= kPanel.t && g.r.b <= kPanel.b); // inside the panel
+    CHECK(g.r.W() > 0 && g.r.H() > 0);
+  }
+  for (size_t i = 0; i < regions.size(); ++i)
+    for (size_t j = i + 1; j < regions.size(); ++j)
+    {
+      const bool ai = regions[i].kind != Kind::Label && regions[i].kind != Kind::Hint, aj = regions[j].kind != Kind::Label && regions[j].kind != Kind::Hint;
+      if (ai && aj && Overlap(regions[i].r, regions[j].r))
+      {
+        ++gFailures;
+        std::printf("  FAIL overlap: '%s' and '%s'\n", regions[i].text.c_str(), regions[j].text.c_str());
+      }
+    }
+}
+
+TEST(SamplesLayout_PageIsSaneInEveryState)
+{
+  SamplesModel m;
+  CheckLayoutSane(SamplesLayout::Compute(LayoutInput(m))); // nothing selected
+
+  m.Select(3, nullptr, false); // free slot
+  CheckLayoutSane(SamplesLayout::Compute(LayoutInput(m)));
+
+  m.Select(0, ModelSlot("normalize->biquadlp(8000,4,0.7)->dcshift(0.1)->fade(5,20)->trellis(64)", true), true);
+  auto regions = SamplesLayout::Compute(LayoutInput(m));
+  CheckLayoutSane(regions);
+
+  // a full chain (kMaxEffects effects, a 3-parameter effect, a quantizer with a parameter) must still fit
+  while (m.NumEffects() < SamplesModel::kMaxEffects)
+    m.AddEffect("biquadhp", 0);
+  CheckLayoutSane(SamplesLayout::Compute(LayoutInput(m)));
+
+  m.Select(0, ModelSlot("normalize->deltasigma", false), false); // source missing
+  CheckLayoutSane(SamplesLayout::Compute(LayoutInput(m, 100)));  // list scrolled to the end
+}
+
+TEST(SamplesLayout_HitTestAndTexts)
+{
+  using namespace SamplesLayout;
+  SamplesModel m;
+  m.Select(5, ModelSlot("normalize->biquadlp(8000,4,0.7)->dcshift(0.1)->trellis1(65)", true), true);
+  auto regions = Compute(LayoutInput(m, 2));
+
+  auto find = [&](const std::string& action, int a, int b) -> const Region* {
+    for (const auto& g : regions)
+      if (g.action == action && g.a == a && g.b == b)
+        return &g;
+    return nullptr;
+  };
+
+  // the list: first visible row is slot 2; the selected slot 5 is marked; velocity = slot + 1
+  const Region* row = find("slot", 2, 0);
+  CHECK(row && row->text.find("  3 ") == 0 && row->text.find("kick_2.wav") != std::string::npos);
+  CHECK(find("slot", 5, 0)->selected && !find("slot", 4, 0)->selected);
+  CHECK(find("slot", 1, 0) == nullptr && find("slot", 26, 0) == nullptr && find("slot", 25, 0) != nullptr); // 24 rows visible
+
+  // the biquad row: 3 fields with name, value and unit; moving up is not possible for the first effect
+  CHECK(find("field", 1, 0)->text == "Cutoff 8000 Hz" && find("field", 1, 1)->text == "Order 4" && find("field", 1, 2)->text == "Q 0.7");
+  CHECK(find("moveup", 0, 0) == nullptr || !find("moveup", 0, 0)->enabled);
+  CHECK(find("autodc", 2, 0) != nullptr);          // the DC shift row has the auto button
+  CHECK(find("field", 3, 0)->text == "States 65"); // stage index NumEffects() = the quantizer
+
+  // hit testing finds buttons and fields, ignores labels and disabled regions
+  const Region* g = find("field", 1, 1);
+  CHECK(HitTest(regions, g->r.l + 5, g->r.t + 5) == g);
+  CHECK(HitTest(regions, 5, 5) == nullptr);
+  const Region* up = find("moveup", 0, 0);
+  CHECK(HitTest(regions, up->r.l + 3, up->r.t + 3) == nullptr); // disabled
+
+  // a source that is missing disables every edit and shows why
+  m.Select(5, ModelSlot("normalize->deltasigma", false), false);
+  regions = Compute(LayoutInput(m));
+  bool anyEnabledEdit = false, hasWarning = false;
+  for (const auto& r : regions)
+  {
+    anyEnabledEdit |= (r.action == "field" || r.action == "addeffect" || r.action == "preset_load" || r.action == "remove") && r.enabled;
+    hasWarning |= r.text.find("MISSING") != std::string::npos;
+  }
+  CHECK(!anyEnabledEdit && hasWarning);
+  CHECK(SamplesLayout::FieldText({"Offset", "", -1, 1, 0, 0.01, false}, -0.123456) == "Offset -0.1235");
+  CHECK(SamplesLayout::Shorten("abcdefghij", 6) == "abcde~");
+
+  // optional: write the layout out so a picture can be drawn from it (tests/render/README.md)
+  if (const char* dump = std::getenv("OBP_LAYOUT_DUMP"))
+  {
+    m.Select(7, ModelSlot("normalize->biquadlp(8000,4,0.7)->dcshift(0.1)->fade(5,20)->trellis(64)", true), true);
+    std::ofstream f(dump);
+    for (const auto& r : Compute(LayoutInput(m, 0)))
+      f << r.r.l << ' ' << r.r.t << ' ' << r.r.r << ' ' << r.r.b << ' ' << static_cast<int>(r.kind) << ' ' << r.enabled << ' ' << r.selected << ' ' << r.text << '\n';
+  }
+}
+
+// ---------------------------------------------------------------- SampleJobs (import / re-render / auto DC, end to end)
+static std::string WriteTestWav(const std::string& name, double seconds = 0.3, uint32_t rate = 44100, double dc = 0.0)
+{
+  std::vector<uint8_t> d;
+  for (size_t i = 0; i < static_cast<size_t>(seconds * rate); ++i)
+    PutU16(d, static_cast<uint16_t>(static_cast<int16_t>(32767.0 * std::clamp(dc + 0.4 * std::sin(i * 0.07), -1.0, 1.0))));
+  return WriteWav(name, 1, 1, rate, 16, d);
+}
+
+TEST(SampleJobs_ImportFillsFreeSlotsAndRecordsTheChain)
+{
+  SampleData::SampleManager manager;
+  std::atomic<uint64_t> generation{0};
+  const std::string wav = WriteTestWav("job_kick.wav");
+
+  SampleJobs::Job job;
+  job.path = wav;
+  job.sampleRate = 48000;
+  job.chain = PipelineModel::DefaultChain();
+  std::string printedPath;
+  auto r = SampleJobs::Run(manager, generation, job, [&](const std::string& p, const std::vector<int8_t>& bits) { printedPath = p; CHECK(!bits.empty()); });
+  CHECK(r.ok && r.slot == 0 && printedPath == wav);
+  CHECK(!r.preview.after.empty() && !r.preview.before.empty() && !r.preview.waveAfter.empty()); // both spectrograms
+
+  auto slot = manager.GetSlot(0);
+  CHECK(slot && !slot->Empty() && slot->sampleRate == 48000 && slot->path == wav);
+  CHECK(slot->pipeline == "normalize->saturate(10)->dither(0.1)->trellis(64)");
+  CHECK(slot->source && slot->source->sampleRate == 44100 && !slot->embedSource); // kept for editing, not embedded by default
+
+  // the next import goes to the first free slot, a chosen slot is replaced, a hole is filled
+  CHECK(SampleJobs::Run(manager, generation, job).slot == 1);
+  job.slot = 5;
+  CHECK(SampleJobs::Run(manager, generation, job).slot == 5 && manager.DynamicCount() == 6);
+  job.slot = -1;
+  CHECK(SampleJobs::Run(manager, generation, job).slot == 2);
+  manager.ClearSlot(1);
+  CHECK(SampleJobs::Run(manager, generation, job).slot == 1);
+
+  // a missing file or a non-WAV is reported, nothing is added
+  const size_t before = manager.DynamicCount();
+  job.path = "does_not_exist.wav";
+  r = SampleJobs::Run(manager, generation, job);
+  CHECK(!r.ok && r.sourceMissing && r.error.find("does_not_exist.wav") != std::string::npos && manager.DynamicCount() == before);
+  std::remove(wav.c_str());
+}
+
+TEST(SampleJobs_AllSlotsUsed)
+{
+  SampleData::SampleManager manager;
+  std::atomic<uint64_t> generation{0};
+  const int8_t b[] = {1};
+  for (size_t i = 0; i < SampleData::SampleManager::kMaxDynamicSlots; ++i)
+    manager.AddSample(b, 1);
+  const std::string wav = WriteTestWav("job_full.wav", 0.1);
+  SampleJobs::Job job;
+  job.path = wav;
+  job.chain = PipelineModel::DefaultChain();
+  auto r = SampleJobs::Run(manager, generation, job);
+  CHECK(!r.ok && r.error.find("slots are used") != std::string::npos);
+  std::remove(wav.c_str());
+}
+
+TEST(SampleJobs_RerenderKeepsSlotMetadataAndHonoursStaleness)
+{
+  SampleData::SampleManager manager;
+  std::atomic<uint64_t> generation{7};
+  const std::string wav = WriteTestWav("job_snare.wav");
+
+  SampleJobs::Job imp;
+  imp.path = wav;
+  imp.sampleRate = 44100;
+  imp.chain = PipelineModel::DefaultChain();
+  SampleJobs::Run(manager, generation, imp);
+
+  // the user switches the slot to "embed source"
+  SampleData::Slot embedded = *manager.GetSlot(0);
+  embedded.embedSource = true;
+  manager.SetSlot(0, embedded);
+  const auto firstBits = manager.GetSlot(0)->data;
+
+  SampleJobs::Job edit;
+  edit.kind = SampleJobs::Job::Kind::Render;
+  edit.slot = 0;
+  edit.path = wav;
+  edit.source = manager.GetSlot(0)->source; // in memory: the file is not read again
+  edit.sampleRate = 44100;
+  edit.generation = 7;
+  CHECK(PipelineModel::ParseChain("normalize->fade(10,50)->deltasigma", edit.chain));
+
+  std::remove(wav.c_str()); // proves the render does not need the file while the source is in memory
+  auto r = SampleJobs::Run(manager, generation, edit);
+  CHECK(r.ok && !r.stale && !r.preview.before.empty());
+  auto slot = manager.GetSlot(0);
+  CHECK(slot->data != firstBits && slot->pipeline == "normalize->fade(10,50)->deltasigma");
+  CHECK(slot->embedSource && slot->path == wav && slot->source == edit.source); // metadata kept
+
+  // stale: another generation (cleared / reverted / switched meanwhile) -> the slot is not touched
+  const auto bitsNow = slot->data;
+  generation = 8;
+  CHECK(PipelineModel::ParseChain("normalize->gain(-12)->raw", edit.chain));
+  r = SampleJobs::Run(manager, generation, edit);
+  CHECK(r.stale && !r.ok && manager.GetSlot(0)->data == bitsNow);
+
+  // the slot was cleared while rendering
+  edit.generation = 8;
+  manager.ClearSlot(0);
+  r = SampleJobs::Run(manager, generation, edit);
+  CHECK(r.stale && manager.GetSlot(0) == nullptr);
+}
+
+TEST(SampleJobs_EditWithoutSourceNeedsTheFile)
+{
+  SampleData::SampleManager manager;
+  std::atomic<uint64_t> generation{0};
+  const std::string wav = WriteTestWav("job_moved.wav");
+  SampleJobs::Job imp;
+  imp.path = wav;
+  imp.chain = PipelineModel::DefaultChain();
+  SampleJobs::Run(manager, generation, imp);
+
+  // a state was loaded: the slot has its path but no source in memory
+  SampleData::Slot s = *manager.GetSlot(0);
+  s.source = nullptr;
+  manager.SetSlot(0, s);
+  const auto stored = manager.GetSlot(0)->data;
+
+  SampleJobs::Job edit;
+  edit.kind = SampleJobs::Job::Kind::Render;
+  edit.slot = 0;
+  edit.path = wav;
+  edit.chain = PipelineModel::DefaultChain();
+  edit.chain.effects.push_back(PipelineModel::DefaultStage("gain"));
+  auto r = SampleJobs::Run(manager, generation, edit);
+  CHECK(r.ok && manager.GetSlot(0)->source != nullptr); // read from the file, and kept in memory from now on
+
+  // file gone, nothing in memory: the sample keeps playing as it is, the edit is refused with a reason
+  s = *manager.GetSlot(0);
+  s.source = nullptr;
+  manager.SetSlot(0, s);
+  const auto before = manager.GetSlot(0)->data;
+  std::remove(wav.c_str());
+  r = SampleJobs::Run(manager, generation, edit);
+  CHECK(!r.ok && r.sourceMissing && manager.GetSlot(0)->data == before);
+
+  // a chain that leaves nothing is refused too, and the slot is untouched
+  const std::string wav2 = WriteTestWav("job_trim.wav");
+  SampleJobs::Job imp2 = imp;
+  imp2.path = wav2;
+  SampleJobs::Run(manager, generation, imp2);
+  SampleJobs::Job trim;
+  trim.kind = SampleJobs::Job::Kind::Render;
+  trim.slot = 1;
+  trim.path = wav2;
+  CHECK(PipelineModel::ParseChain("trim(20000,1000)->deltasigma", trim.chain)); // starts after the end
+  const auto bits2 = manager.GetSlot(1)->data;
+  r = SampleJobs::Run(manager, generation, trim);
+  CHECK(!r.ok && r.error.find("nothing") != std::string::npos && manager.GetSlot(1)->data == bits2);
+  std::remove(wav2.c_str());
+}
+
+TEST(SampleJobs_AutoDcFindsAnOffsetAndTheRenderUsesIt)
+{
+  SampleData::SampleManager manager;
+  std::atomic<uint64_t> generation{0};
+  const std::string wav = WriteTestWav("job_dc.wav", 0.3, 44100, 0.3);
+
+  SampleJobs::Job imp;
+  imp.path = wav;
+  imp.sampleRate = 44100;
+  CHECK(PipelineModel::ParseChain("normalize->dcshift(0)->deltasigma", imp.chain));
+  SampleJobs::Run(manager, generation, imp);
+  const double dcBefore = SampleRender::BitsDc(manager.GetSlot(0)->data);
+
+  SampleJobs::Job dc = imp;
+  dc.kind = SampleJobs::Job::Kind::AutoDc;
+  dc.slot = 0;
+  dc.dcStage = 1;
+  dc.source = manager.GetSlot(0)->source;
+  auto r = SampleJobs::Run(manager, generation, dc);
+  CHECK(r.ok && r.dcStage == 1 && r.dcOffset < -0.05 && r.dcOffset >= -1.0);
+
+  // what the page does next: set the offset, which re-renders
+  SampleJobs::Job render = dc;
+  render.kind = SampleJobs::Job::Kind::Render;
+  render.chain.effects[1].params = {r.dcOffset};
+  SampleJobs::Run(manager, generation, render);
+  const double dcAfter = SampleRender::BitsDc(manager.GetSlot(0)->data);
+  CHECK(std::fabs(dcBefore) > 0.25 && std::fabs(dcAfter) < 0.03);
+  std::remove(wav.c_str());
 }
 
 // ---------------------------------------------------------------- BitCompression

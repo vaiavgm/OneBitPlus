@@ -39,6 +39,25 @@ public:
     std::vector<float> waveAfter;
   };
 
+  // Preview data for a rendered sample: waveforms and spectrograms of the 1-bit result and (if given) of the signal
+  // before the quantizer.
+  static Preview MakePreview(const std::vector<int8_t>& bits, const std::vector<double>& preQuantizer, uint32_t sampleRate)
+  {
+    constexpr int kCols = 160, kRows = 64;
+    Preview pv;
+    if (!bits.empty())
+    {
+      pv.after = Spectrogram::Compute(Spectrogram::DecodeBits(bits), sampleRate, kCols, kRows);
+      pv.waveAfter = Spectrogram::DecodeBits(bits, 32); // a short average shows the encoded waveform
+    }
+    if (!preQuantizer.empty())
+    {
+      pv.waveBefore.assign(preQuantizer.begin(), preQuantizer.end());
+      pv.before = Spectrogram::Compute(pv.waveBefore, sampleRate, kCols, kRows);
+    }
+    return pv;
+  }
+
   // ------------------------------------------------------------------------------------------ selection
 
   int Selected() const { return mSelected; }
@@ -53,6 +72,7 @@ public:
     mPendingAutoDc = -1;
     mMessage.clear();
     mPreview = Preview{};
+    ++mPreviewVersion;
     mChainUnknown = false;
     mChain = PipelineModel::DefaultChain();
     mEmbed = false;
@@ -208,7 +228,13 @@ public:
   // ------------------------------------------------------------------------------------------ preview and messages
 
   const Preview& GetPreview() const { return mPreview; }
-  void SetPreview(Preview preview) { mPreview = std::move(preview); }
+  void SetPreview(Preview preview)
+  {
+    mPreview = std::move(preview);
+    ++mPreviewVersion;
+  }
+  // Changes whenever the preview does (the control caches what it derives from it).
+  uint64_t PreviewVersion() const { return mPreviewVersion; }
   const std::string& Message() const { return mMessage; }
   void SetMessage(std::string message) { mMessage = std::move(message); }
 
@@ -231,4 +257,5 @@ private:
   int mPendingAutoDc = -1;
   std::string mMessage;
   Preview mPreview;
+  uint64_t mPreviewVersion = 0;
 };

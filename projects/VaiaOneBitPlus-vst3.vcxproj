@@ -346,6 +346,14 @@
     <ClInclude Include="..\src\SampleTools.h" />
     <ClInclude Include="..\src\SampleImportWorker.h" />
     <ClInclude Include="..\src\StateFormat.h" />
+    <ClInclude Include="..\src\PipelineModel.h" />
+    <ClInclude Include="..\src\SampleRender.h" />
+    <ClInclude Include="..\src\SampleJobs.h" />
+    <ClInclude Include="..\src\Spectrogram.h" />
+    <ClInclude Include="..\src\ChainPresets.h" />
+    <ClInclude Include="..\src\SamplesModel.h" />
+    <ClInclude Include="..\src\SamplesLayout.h" />
+    <ClInclude Include="..\src\SamplesPanel.h" />
     <ClInclude Include="..\src\TrellisQuantizer.h" />
     <ClInclude Include="..\src\VaiaOneBitPlus.h" />
     <ClInclude Include="..\src\VaiaOneBitPlus_DSP.h" />

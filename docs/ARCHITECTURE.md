@@ -15,7 +15,15 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | `SampleData.h` | `SampleManager`: velocity-indexed sample slots (static prepared samples plus up to 127 dynamic ones) in immutable, atomically swapped banks. |
 | `StateFormat.h` | Versioned read/write of the custom state block (v0/v1/v2, `dspVersion`). |
 | `SampleImportWorker.h` | Background thread for sample imports. |
-| `PipelinePresets.h` | Named import pipelines (effects + quantizer). |
+| `PipelinePresets.h` | The factory import pipelines as `AudioPipeline` objects (kept to prove the factory chains in `PipelineModel.h` build the same thing). |
+| `PipelineModel.h` | A **chain** (effects + one quantizer) as data: registry of stage types with parameter ranges, text format (also reads the old `AudioPipeline` text of existing projects), `Build()`, factory chains. |
+| `SampleRender.h` | Source audio → chain → packed 1-bit data; `BitsDc`; `FindDcOffset` (bisection for the DC shift that leaves the least DC in the result). |
+| `SampleJobs.h` | The background jobs: import a WAV, re-render a slot with an edited chain, auto-DC. Pure, so tested end to end. |
+| `ChainPresets.h` | Chain presets: factory + `.obpchain` files in a user folder (+ read-only shared folders). |
+| `Spectrogram.h` | FFT, log-frequency spectrogram, bit decoding, waveform envelope for the preview. |
+| `SamplesModel.h` | Logic of the Samples page: selected slot, the chain being edited (draft), debounced re-render scheduling, preview data. No drawing. |
+| `SamplesLayout.h` | Geometry and texts of the Samples page as a list of regions, plus hit-testing. No drawing. |
+| `SamplesPanel.h` | The iPlug2 control that draws the layout and turns mouse input into model calls. |
 | `SampleLoader.h` | Minimal RIFF/WAV parser → mono `int32` PCM. |
 | `SampleTools.h` | Resampling (nearest/linear/Lanczos-3), `ReduceToOneBit` (pipeline → bits → packed bytes). |
 | `IAudioEffect.h` | Offline pre-processing effects (Gain, Trim, Normalize, LP/HP, Biquad, Saturate, Clip, SR-reduce, Dither) and `AudioPipeline`. |
@@ -74,6 +82,17 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 - **v0**: no block (params only).
 - **v1**: `u32 1, u32 n, n×{u32 sr, u32 size, bytes}, u32 m, m×{str path, str pipeline}`. Read-only.
 - **v2**: `u32 2, u32 dspVersion, u32 n, n×{u32 sr, u32 size, bytes, str path, str pipeline}`. Read-only.
-- **v3** (written now): `u32 3, u32 dspVersion, u32 compatFlags, u32 n, n×{…as v2}`.
+- **v3**: `u32 3, u32 dspVersion, u32 compatFlags, u32 n, n×{…as v2}`. Read-only.
+- **v4** (written now): like v3, and each slot also has `u32 embedded [u32 sourceRate, u32 count, count×int16]`. A slot with no data is a free slot and is **kept**, so later samples keep their velocity (v1-v3 never had free slots).
 
 `dspVersion` is the sound-behaviour version the state was saved with (1 = original behaviour, 2 = Phase 6, 3 = Sampler Pitch). When it is older than 3, the Sampler Pitch parameter is reset to off. When it is older than 2, `VaiaOneBitPlus::ApplyMigrations` also resets the parameters that did nothing before (Release, Pitch Keytrack) and turns on `kCompatLegacyTiming`, which keeps the original tempo (fixed 120 BPM), sample-playback and smoothing behaviour. `compatFlags` are saved with the project, and the "Legacy timing" switch in the editor changes them. **When you change the sound on purpose again**, bump `kLatestDspVersion`, add a migration step, and add the render hash for it. See [ANALYSIS.md](ANALYSIS.md#5-legacy-projects-and-migration-phase-6).
+
+## Samples page (the "Samples" tab)
+
+A sample is rendered from its **source** (a WAV, mono, at its own rate) through a **chain** into packed 1-bit data. The 1-bit data is what plays and what is saved; it is only rendered again when the user edits the chain, which also means that existing projects can't change sound.
+
+- **Slots** are fixed positions: slot *n* plays at velocity *n*. Clearing a slot leaves a free slot (`SampleManager::ClearSlot`), and the next import fills the first free one, so no sample ever changes velocity.
+- **Source** of a slot: in memory (`Slot::source`, shared and immutable), or read from `Slot::path` when needed, or embedded in the project when the slot's *Embed source* switch is on (16 bit mono, about 88 KB per second). If neither is available the sample still plays but can't be edited, and *Locate file...* fixes that.
+- **Editing** works on a draft chain in `SamplesModel`. After a short pause it renders on the worker thread (`SampleJobs::Run`) and swaps the result into the slot (a new sample bank), so the sample can be auditioned while editing. *Revert* puts the slot back as it was when it was selected. A render that finishes after the slot was cleared, reverted or switched is thrown away (`mSlotGeneration`).
+- **Presets**: the factory chains, plus `.obpchain` files in `<AppData>/Vaiaphraim/OneBitPlus/Presets` (read and write) and `<ProgramData>/Vaiaphraim/OneBitPlus/Presets` (read only, for an installer). A sample keeps its own copy of the chain, so presets are only starting points.
+- While the page is open the meter, scope and LFO displays under it are hidden, because they are redrawn every frame and would force the page to redraw with them.

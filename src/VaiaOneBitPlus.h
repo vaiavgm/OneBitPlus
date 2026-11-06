@@ -17,7 +17,14 @@
 #include "src/SampleImportWorker.h"
 #include "src/StateFormat.h"
 #include "src/DragDropWaveformDisplay.h"
+#include "src/ChainPresets.h"
+#include "src/PipelineModel.h"
+#include "src/SampleJobs.h"
+#include "src/SampleRender.h"
+#include "src/SamplesModel.h"
+#include "src/SamplesPanel.h"
 #include <atomic>
+#include <filesystem>
 #include <string.h>
 
 class VaiaOneBitPlus final : public Plugin
@@ -36,10 +43,9 @@ public:
   int UnserializeState(const IByteChunk& chunk, int startPos) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  // Synchronous import (load -> resample -> pipeline -> 1-bit) of a WAV file into the next free sample slot.
-  // Thread-safe; returns the dynamic sample index or -1. The drop box uses the background worker instead.
-  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline(), bool printBits = false);
-  int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  // Imports a WAV file in the background with the default chain: into slot `slot`, or the first free one (-1).
+  // The result is picked up in OnIdle, which selects the new slot.
+  void ImportFile(const std::string& path, int slot = -1);
   // Builds a C++ array definition of the packed sample (for SampleData.h) and writes it to the debugger output.
   std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
 
@@ -59,28 +65,34 @@ public:
   int mPreviewVelocity = 0;
 
 private:
-  struct ImportJob
-  {
-    std::string path;
-    uint32_t sampleRate = 44100;
-    ResampleAlgo algo = ResampleAlgo::Lanczos;
-    AudioPipeline pipeline;
-    bool printBits = false;
-  };
+  // Work for the background thread (see SampleJobs.h)
+  using SampleJob = SampleJobs::Job;
+  using SampleJobResult = SampleJobs::Result;
+  SampleJobResult RunJob(const SampleJob& job);
 
-  struct ImportResult
-  {
-    int index = -1; // dynamic sample index, -1 on failure
-  };
+  // --- the Samples page (all on the main thread) ---
+  void SelectSlot(int slot);                 // select a slot in the model, show its preview
+  void RefreshDropBox();                     // waveform in the drop box + the velocity the audition plays
+  void SetSamplesPageOpen(bool open);
+  void SendAudition(bool down);
+  void ClearSelectedSlot();
+  void RevertSelectedSlot();
+  void SetEmbedSource(bool embed);
+  void LocateSource(const std::string& path);
+  void EnqueueRender(bool loadSourceOnly);
+  void HandleJobResults();
+  SamplesLayout::SlotInfo SlotInfoFor(int slot) const;
 
-  ImportResult RunImport(const ImportJob& job);
+  SamplesModel mSamplesModel;
+  ChainPresets::Store mPresets{std::filesystem::path()};
+  SamplesPanel* mSamplesPanel = nullptr; // owned by IGraphics, nullptr while the editor is closed
+  std::atomic<uint64_t> mSlotGeneration{0};
+
   // Makes a loaded state sound like it did when it was saved (see StateFormat.h): converts parameters that
   // changed meaning, and switches on the compatibility behaviours the old version had.
   void ApplyMigrations(const OneBitState::Data& data);
   // Sets a parameter to a value (used by migrations) and passes it on to the DSP.
   void ResetParam(int paramIdx, double value = 0.);
-  // Shows the most recently imported sample in the drop box and makes it the one to audition.
-  void ShowLatestSample();
   // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.
   void UpdateLfoRateVisibility(int type);
 
@@ -88,6 +100,6 @@ private:
   std::atomic<bool> mSamplesChanged{false};
 
   // Declared last so it is destroyed (and its thread joined) before everything it uses.
-  SampleImportWorker<ImportJob, ImportResult> mImportWorker{[this](const ImportJob& job) { return RunImport(job); }};
+  SampleImportWorker<SampleJob, SampleJobResult> mImportWorker{[this](const SampleJob& job) { return RunJob(job); }};
 #endif
 };

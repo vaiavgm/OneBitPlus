@@ -169,6 +169,8 @@ enum EControlTags
   kCtrlTagKeyboard,
   kCtrlTagBender,
   kCtrlTagLegacyTiming,
+  kCtrlTagSamplesTab,
+  kCtrlTagSamplesPanel,
   kCtrlTagLFOVisFirst, // kNumTypes x {PWM LFO, pitch LFO}: tag = kCtrlTagLFOVisFirst + 2 * type + (pitch ? 1 : 0)
   kCtrlTagLFOVisLast = kCtrlTagLFOVisFirst + 2 * 4 - 1,
   kNumCtrlTags
