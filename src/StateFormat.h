@@ -16,6 +16,11 @@
 //  v2  u32 version=2 | u32 dspVersion | u32 numSlots
 //      | numSlots x {u32 sr, u32 size, size bytes, str path, str pipeline}
 //  v3  u32 version=3 | u32 dspVersion | u32 compatFlags | u32 numSlots | (slots as in v2)
+//  v4  u32 version=4 | u32 dspVersion | u32 compatFlags | u32 numSlots
+//      | numSlots x {u32 sr, u32 size, size bytes, str path, str pipeline, u32 embedded
+//                    [if embedded: u32 sourceRate, u32 sourceCount, sourceCount x int16]}
+//      A slot with size 0 is a free slot (a hole): it keeps the slots after it at their velocity. v1-v3 never
+//      had holes, so their reader drops empty slots as it always did.
 //
 // dspVersion describes the *sound behaviour* the state was saved with, independent of the container
 // layout. Loading a state with an older dspVersion lets the plugin migrate parameters so that existing
@@ -31,6 +36,8 @@
 // compatFlags are switches that keep a *behaviour* of an older version for as long as the user wants.
 // They are saved with the project (see ECompat).
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -40,7 +47,7 @@
 namespace OneBitState
 {
 
-constexpr uint32_t kLatestVersion = 3;
+constexpr uint32_t kLatestVersion = 4;
 
 // Sound-behaviour versions (see the comment at the top)
 constexpr uint32_t kDspVersionLegacy = 1;
@@ -58,6 +65,7 @@ enum ECompat : uint32_t
 constexpr uint32_t kMaxSlots = static_cast<uint32_t>(SampleData::SampleManager::kMaxDynamicSlots);
 constexpr uint32_t kMaxSampleBytes = 1'048'576; // matches SampleOscillator::kMaxSampleBytes
 constexpr uint32_t kMaxSampleRate = 1'536'000;
+constexpr uint32_t kMaxSourceSamples = 100'000'000; // embedded source audio, 16 bit mono
 
 struct Data
 {
@@ -88,6 +96,22 @@ void Write(Chunk& chunk, const std::vector<SampleData::Slot>& slots, uint32_t ds
       chunk.PutBytes(slot.data.data(), static_cast<int>(size));
     chunk.PutStr(slot.path.c_str());
     chunk.PutStr(slot.pipeline.c_str());
+
+    // the source audio is only saved when the slot asks for it (otherwise only its path is kept)
+    const bool embed = slot.embedSource && slot.source && !slot.source->pcm.empty() && slot.source->pcm.size() <= kMaxSourceSamples;
+    uint32_t embedded = embed ? 1u : 0u;
+    chunk.Put(&embedded);
+    if (embed)
+    {
+      uint32_t sourceRate = slot.source->sampleRate;
+      uint32_t sourceCount = static_cast<uint32_t>(slot.source->pcm.size());
+      chunk.Put(&sourceRate);
+      chunk.Put(&sourceCount);
+      std::vector<int16_t> pcm16(sourceCount);
+      for (uint32_t i = 0; i < sourceCount; ++i)
+        pcm16[i] = static_cast<int16_t>(std::clamp<long>(std::lround(slot.source->pcm[i] / 65536.0), -32768, 32767));
+      chunk.PutBytes(pcm16.data(), static_cast<int>(sourceCount * sizeof(int16_t)));
+    }
   }
 }
 
@@ -105,6 +129,34 @@ bool ReadSampleBytes(const Chunk& chunk, int& pos, SampleData::Slot& slot)
   slot.data.resize(size);
   if (size && (pos = chunk.GetBytes(slot.data.data(), static_cast<int>(size), pos)) < 0)
     return false;
+  return true;
+}
+
+template <class Chunk>
+bool ReadEmbeddedSource(const Chunk& chunk, int& pos, SampleData::Slot& slot)
+{
+  uint32_t embedded = 0;
+  if ((pos = chunk.Get(&embedded, pos)) < 0)
+    return false;
+  if (embedded == 0)
+    return true;
+
+  uint32_t rate = 0, count = 0;
+  if ((pos = chunk.Get(&rate, pos)) < 0 || (pos = chunk.Get(&count, pos)) < 0)
+    return false;
+  if (count == 0 || count > kMaxSourceSamples || rate == 0 || rate > kMaxSampleRate || static_cast<int64_t>(count) * 2 > static_cast<int64_t>(chunk.Size()) - pos)
+    return false;
+
+  std::vector<int16_t> pcm16(count);
+  if ((pos = chunk.GetBytes(pcm16.data(), static_cast<int>(count * sizeof(int16_t)), pos)) < 0)
+    return false;
+  auto source = std::make_shared<SampleData::SourceAudio>();
+  source->sampleRate = rate;
+  source->pcm.resize(count);
+  for (uint32_t i = 0; i < count; ++i)
+    source->pcm[i] = static_cast<int32_t>(pcm16[i]) * 65536;
+  slot.source = std::move(source);
+  slot.embedSource = true;
   return true;
 }
 
@@ -166,12 +218,12 @@ int Read(const Chunk& chunk, int startPos, Data& out)
       }
     }
   }
-  else if (version == 2 || version == 3)
+  else if (version >= 2 && version <= 4)
   {
     uint32_t numSlots = 0;
     if ((pos = chunk.Get(&out.dspVersion, pos)) < 0)
       return fail();
-    if (version == 3 && (pos = chunk.Get(&out.compatFlags, pos)) < 0)
+    if (version >= 3 && (pos = chunk.Get(&out.compatFlags, pos)) < 0)
       return fail();
     if ((pos = chunk.Get(&numSlots, pos)) < 0 || numSlots > kMaxSlots)
       return fail();
@@ -180,6 +232,8 @@ int Read(const Chunk& chunk, int startPos, Data& out)
     {
       if (!detail::ReadSampleBytes(chunk, pos, slot) || !detail::ReadString<Str>(chunk, pos, slot.path) || !detail::ReadString<Str>(chunk, pos, slot.pipeline))
         return fail();
+      if (version >= 4 && !detail::ReadEmbeddedSource(chunk, pos, slot))
+        return fail();
     }
   }
   else
@@ -187,12 +241,16 @@ int Read(const Chunk& chunk, int startPos, Data& out)
     return fail(); // unknown (newer) version: don't guess
   }
 
-  // v1 states saved empty slots too; they were never added on load, keep that behaviour
-  std::vector<SampleData::Slot> nonEmpty;
-  for (auto& s : out.slots)
-    if (!s.data.empty())
-      nonEmpty.push_back(std::move(s));
-  out.slots = std::move(nonEmpty);
+  // v1-v3 states saved empty slots too, but they were never added on load, so later samples moved up. Keep that
+  // behaviour for those versions. v4 keeps free slots where they are.
+  if (version < 4)
+  {
+    std::vector<SampleData::Slot> nonEmpty;
+    for (auto& s : out.slots)
+      if (!s.data.empty())
+        nonEmpty.push_back(std::move(s));
+    out.slots = std::move(nonEmpty);
+  }
   return pos;
 }
 

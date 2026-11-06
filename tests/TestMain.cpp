@@ -23,6 +23,7 @@
 #include "src/SampleRender.h"
 #include "src/Spectrogram.h"
 #include "src/ChainPresets.h"
+#include "src/SamplesModel.h"
 #include "src/SampleLoader.h"
 #include "src/SampleTools.h"
 
@@ -487,6 +488,39 @@ TEST(State_V3CarriesCompatFlags)
   CHECK(d.valid && d.version == 2 && d.dspVersion == 1 && d.compatFlags == 0 && d.slots.size() == 1 && d.slots[0].path == "p.wav");
 }
 
+TEST(State_V4KeepsHolesAndEmbeddedSource)
+{
+  SampleData::Slot a = MakeSlot({1, 2}, 44100, "a.wav", "normalize->deltasigma");
+  SampleData::Slot hole; // free slot between two samples: the second keeps its velocity
+  SampleData::Slot b = MakeSlot({3}, 48000, "b.wav", "");
+  b.embedSource = true;
+  auto bSource = std::make_shared<SampleData::SourceAudio>();
+  bSource->sampleRate = 22050;
+  bSource->pcm = {0, 65536 * 100, -65536 * 100, 2147418112, -2147483647 - 1};
+  b.source = bSource;
+  SampleData::Slot c = MakeSlot({4}, 44100, "c.wav", "");
+  auto cSource = std::make_shared<SampleData::SourceAudio>(); // in memory but not embedded: only the path is saved
+  cSource->pcm = {1, 2, 3};
+  c.source = cSource;
+
+  FakeChunk ch;
+  OneBitState::Write(ch, {a, hole, b, c});
+  OneBitState::Data d;
+  CHECK(OneBitState::Read<FakeStr>(ch, 0, d) == ch.Size());
+  CHECK(d.valid && d.version == 4 && d.slots.size() == 4);
+  CHECK(d.slots[1].Empty() && d.slots[2].path == "b.wav"); // the hole is kept
+  CHECK(d.slots[0].source == nullptr && !d.slots[0].embedSource);
+  CHECK(d.slots[2].embedSource && d.slots[2].source && d.slots[2].source->sampleRate == 22050);
+  const auto& pcm = d.slots[2].source->pcm;
+  CHECK(pcm.size() == 5 && pcm[0] == 0 && pcm[1] == 65536 * 100 && pcm[2] == -65536 * 100 && pcm[3] == 32767 * 65536 && pcm[4] == -32768 * 65536);
+  CHECK(!d.slots[3].embedSource && d.slots[3].source == nullptr);
+  CHECK(d.slots[0].pipeline == "normalize->deltasigma");
+
+  // a truncated embedded source is rejected as a whole
+  ch.bytes.resize(ch.bytes.size() - 20);
+  CHECK(OneBitState::Read<FakeStr>(ch, 0, d) == 0 && !d.valid);
+}
+
 TEST(State_ReadsV1)
 {
   // exactly what the original SerializeState wrote
@@ -822,6 +856,121 @@ TEST(Presets_FactorySaveLoadDelete)
   CHECK(store.List().size() == FactoryChains().size() + 1);
   CHECK(ChainPresets::FileNameFor("a/b:c ") == "a_b_c.obpchain");
   fs::remove_all(base);
+}
+
+// ---------------------------------------------------------------- SamplesModel
+static std::shared_ptr<const SampleData::Slot> ModelSlot(const std::string& pipeline, bool withSource)
+{
+  auto slot = std::make_shared<SampleData::Slot>();
+  slot->data = {1, 2, 3};
+  slot->path = "kick.wav";
+  slot->pipeline = pipeline;
+  if (withSource)
+    slot->source = std::make_shared<SampleData::SourceAudio>();
+  return slot;
+}
+
+TEST(SamplesModel_SelectLoadsTheChain)
+{
+  SamplesModel m;
+  m.Select(4, ModelSlot("normalize->gain(3)->deltasigma", true), true);
+  CHECK(m.Selected() == 4 && m.HasSample() && m.Editable() && m.Status() == SamplesModel::SourceStatus::InMemory);
+  CHECK(m.NumEffects() == 2 && m.StageAt(1).id == "gain" && m.StageAt(2).id == "deltasigma"); // index 2 = the quantizer
+  CHECK(!m.ChainUnknown());
+
+  // old project: the chain text is the old format
+  m.Select(0, ModelSlot("NormalizeEffect->SaturateEffect(10)->DitherEffect(0.1)->TrellisQuantizer(maxRam=67108864)", false), true);
+  CHECK(m.Chain() == PipelineModel::DefaultChain() && !m.ChainUnknown() && m.Status() == SamplesModel::SourceStatus::File);
+
+  // a sample whose chain was never recorded (or is garbage): editing starts from the default chain
+  m.Select(0, ModelSlot("<no pipeline>", false), true);
+  CHECK(m.ChainUnknown() && m.Chain() == PipelineModel::DefaultChain());
+
+  // source file gone and nothing in memory: can't be edited
+  m.Select(0, ModelSlot("normalize->deltasigma", false), false);
+  CHECK(m.Status() == SamplesModel::SourceStatus::Missing && !m.Editable() && !m.AddEffect("gain", 0) && !m.NeedsRender(10000));
+
+  // free slot
+  m.Select(7, nullptr, false);
+  CHECK(!m.HasSample() && m.Status() == SamplesModel::SourceStatus::None && !m.Editable() && m.Selected() == 7);
+}
+
+TEST(SamplesModel_EditsAndDebounce)
+{
+  SamplesModel m;
+  m.Select(0, ModelSlot("normalize->gain(3)->deltasigma", true), true);
+  CHECK(!m.NeedsRender(1000));
+
+  CHECK(m.SetParam(1, 0, 6.0, 1000)); // gain 3 -> 6 dB
+  CHECK(m.StageAt(1).params[0] == 6.0);
+  CHECK(!m.SetParam(1, 0, 6.0, 1001)); // no change
+  CHECK(m.SetParam(1, 0, 99.0, 1002) && m.StageAt(1).params[0] == 24.0); // clamped
+  CHECK(!m.SetParam(1, 5, 1.0, 1003) && !m.SetParam(9, 0, 1.0, 1003));
+
+  // keeps being edited -> no render until it has been quiet for the debounce time
+  CHECK(!m.NeedsRender(1002 + SamplesModel::kDebounceMs - 1));
+  CHECK(m.NeedsRender(1002 + SamplesModel::kDebounceMs));
+
+  m.RenderStarted();
+  CHECK(!m.NeedsRender(99999) && m.Busy());
+  CHECK(m.SetParam(1, 0, 2.0, 5000)); // edited during the render
+  CHECK(!m.NeedsRender(5000 + SamplesModel::kDebounceMs)); // still running
+  m.RenderFinished();
+  CHECK(m.NeedsRender(5000 + SamplesModel::kDebounceMs)); // the edit made while it ran triggers the next one
+  m.RenderStarted();
+  m.RenderFinished("done");
+  CHECK(!m.Busy() && m.Message() == "done");
+}
+
+TEST(SamplesModel_StructureEdits)
+{
+  SamplesModel m;
+  m.Select(0, ModelSlot("normalize->deltasigma", true), true);
+  CHECK(m.AddEffect("fade", 1) && m.AddEffect("dither", 2));
+  CHECK(m.NumEffects() == 3 && m.StageAt(1).id == "fade" && m.StageAt(2).id == "dither");
+  CHECK(!m.AddEffect("trellis", 3) && !m.AddEffect("nonsense", 3)); // a quantizer isn't an effect
+  while (m.NumEffects() < SamplesModel::kMaxEffects)
+    CHECK(m.AddEffect("gain", 3));
+  CHECK(!m.AddEffect("gain", 3)); // the page has room for kMaxEffects
+  while (m.NumEffects() > 3)
+    CHECK(m.RemoveEffect(m.NumEffects() - 1, 3));
+
+  CHECK(m.MoveEffect(2, -1, 4));
+  CHECK(m.StageAt(1).id == "dither" && m.StageAt(2).id == "fade");
+  CHECK(!m.MoveEffect(0, -1, 5) && !m.MoveEffect(2, 1, 5) && !m.MoveEffect(1, 0, 5));
+
+  CHECK(m.RemoveEffect(0, 6) && m.NumEffects() == 2 && m.StageAt(0).id == "dither");
+  CHECK(!m.RemoveEffect(7, 7));
+
+  CHECK(m.SetQuantizer("trellis3", 8) && m.StageAt(2).id == "trellis3" && m.StageAt(2).params == std::vector<double>{129});
+  CHECK(!m.SetQuantizer("trellis3", 9) && !m.SetQuantizer("gain", 9));
+
+  PipelineModel::Chain preset;
+  CHECK(PipelineModel::ParseChain("normalize->saturate(3)->raw", preset));
+  CHECK(m.LoadChain(preset, 10) && m.Chain() == preset && !m.LoadChain(preset, 11));
+}
+
+TEST(SamplesModel_AutoDcAddsTheStage)
+{
+  SamplesModel m;
+  m.Select(0, ModelSlot("normalize->deltasigma", true), true);
+  CHECK(m.FindEffect("dcshift") == -1);
+  int index = m.RequestAutoDc(100);
+  CHECK(index == 1 && m.StageAt(1).id == "dcshift" && m.NumEffects() == 2);
+  CHECK(m.TakePendingAutoDc() == 1 && m.TakePendingAutoDc() == -1);
+  CHECK(m.RequestAutoDc(200) == 1 && m.NumEffects() == 2); // reuses the stage that is there
+  CHECK(m.SetParam(1, 0, -0.25, 300) && m.StageAt(1).params[0] == -0.25);
+}
+
+TEST(SamplesModel_EmbedFlagFollowsTheSlot)
+{
+  auto slot = std::make_shared<SampleData::Slot>(*ModelSlot("normalize->deltasigma", true));
+  slot->embedSource = true;
+  SamplesModel m;
+  m.Select(0, slot, true);
+  CHECK(m.Embed());
+  m.SetEmbed(false);
+  CHECK(!m.Embed() && !m.NeedsRender(99999)); // not an edit of the sound
 }
 
 // ---------------------------------------------------------------- BitCompression
