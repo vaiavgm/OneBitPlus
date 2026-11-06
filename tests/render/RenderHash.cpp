@@ -56,6 +56,7 @@ int main(int argc, char** argv)
   dsp->SetParam(kParamExtraUnison1, 4.); dsp->SetParam(kParamExtraDetune1, 25.);
   dsp->SetParam(kParamPitchAttack3, 50.); dsp->SetParam(kParamPitchDecay3, 80.); dsp->SetParam(kParamPitchModPow3, 2.); dsp->SetParam(kParamPitchSustain3, 10.);
   dsp->SetParam(kParamPwmKeyTrack3, 1.); dsp->SetParam(kParamPwmOffset3, 0.2);
+  dsp->SetParam(kParamPitchKeyTrack3, 0.5); dsp->SetParam(kParamPitchKeyTrack4, -0.25); // inert in the original version
   dsp->SetParam(kParamExtraUnison2, 8.); dsp->SetParam(kParamExtraDetune2, 60.);
   // tempo-synced LFOs on types 2 (pitch) and 4 (PWM), played while the transport runs and after it has stopped
   dsp->SetParam(kParamPitchLFODepth2, 8.); dsp->SetParam(kParamPitchLFORateMode2, 1.); dsp->SetParam(kParamPitchLFORateTempo2, (double)LFO<>::k16th);
@@ -66,6 +67,7 @@ int main(int argc, char** argv)
     {
       dsp->SetParam(TypeParam(t, kParamPwmRelease1), 0.);
       dsp->SetParam(TypeParam(t, kParamPitchRelease1), 0.);
+      dsp->SetParam(TypeParam(t, kParamPitchKeyTrack1), 0.);
     }
   }
 

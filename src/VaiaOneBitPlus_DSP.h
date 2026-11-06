@@ -401,7 +401,11 @@ public:
         auto pitchEnvVal = mPitchEnv.Process(inputs[kModPitchSustainSmoother1 + mOscId][i]) * pitchModStrength + pitchOffsetStrength;
         auto pwmEnvVal = (mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + mOscId][i]) + mModWheel + inputs[kModPwmLFO1 + mOscId][i]) * pwmModStrength + pwmOffsetStrength;
 
-        double oscFreq = 440.0 * pow(2.0, pitch + pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal);
+        // Pitch Keytrack: extra octaves per octave of distance from A440 (0 = off, 1 = every interval doubled,
+        // -1 = every key plays A440). It was stored but never used before.
+        const double keyTrackOctaves = pitchKeyTrackStrength * pitch;
+
+        double oscFreq = 440.0 * pow(2.0, pitch + pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal + keyTrackOctaves);
         double pwmFunc = pwmKeyTrack ? (pwmEnvVal * (oscFreq / 440.0f)) : pwmEnvVal;
 
 

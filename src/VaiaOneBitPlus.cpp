@@ -323,13 +323,16 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
     // The user can switch this off in the editor.
     mDSP.mLegacyTiming = true;
 
-    // The Release stages of both envelopes did nothing before (the voice was cut off at note-off), so whatever
+    // The Release stages of both envelopes (and Pitch Keytrack) did nothing before (the voice was cut off at note-off), so whatever
     // is stored in them was never heard. Reset them to 0, so the sound of the project stays the same now that
     // release works. (A release of 0 ends within a few samples.)
     for (int t = 0; t < kNumTypes; ++t)
     {
       ResetParam(TypeParam(t, kParamPwmRelease1));
       ResetParam(TypeParam(t, kParamPitchRelease1));
+
+      // Pitch Keytrack did nothing before either: reset it, so that it doesn't start to change the pitch now.
+      ResetParam(TypeParam(t, kParamPitchKeyTrack1));
     }
   }
   else
