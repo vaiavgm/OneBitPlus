@@ -7,7 +7,7 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | File | Role |
 |---|---|
 | `config.h` | iPlug2 plugin metadata (name, IDs, channel I/O, UI size). |
-| `Params.h` | `EParams` and `EControlTags` enums, shared by the plugin and the DSP. |
+| `Params.h` | `EParams` and `EControlTags` enums, shared by the plugin and the DSP, plus `TypeParam(type, kParamXxx1)` and compile-time checks of the block layout. |
 | `VaiaOneBitPlus.h/.cpp` | The `Plugin` subclass: parameter definitions (`EParams`), GUI layout (`mLayoutFunc`), state (de)serialization, MIDI routing, sample import (drag & drop). |
 | `VaiaOneBitPlus_DSP.h` | `OneBitPlusDSP<T>`: the voice class, the `MidiSynth` with 32 voices, 8 LFOs, param smoothers, the output stage, `SetParam` routing. |
 | `VaiaOscillator.h` | Pulse/PWM oscillator (`IOscillator<T>`), ±1 output. |
@@ -22,7 +22,6 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | `IQuantizer.h`, `RawQuantizer.h`, `DeltaSigmaQuantizer.h`, `TrellisQuantizer.h` | Float → 1-bit quantizers. Trellis = Viterbi search (1st-order, or 3rd-order "psychoacoustic"). |
 | `BitCompression.h` | Dictionary/Elias-gamma compression metrics for 1-bit streams (used by `CompressionAnalyzer/`). |
 | `DragDropWaveformDisplay.h` | Drop target, waveform preview and click-to-audition control. |
-| `IScrollContainer.h` | Scrollable text container (currently unused). |
 | `Debug.h` | `MY_PRINTF` → `OutputDebugStringA` (Windows only). |
 
 Other top-level folders: `tests/` (standalone unit tests, see [BUILD.md](BUILD.md#testing)), `CompressionAnalyzer/` (a Win32 console + GDI tool that graphs compression rates), `projects/` + `config/` (IDE projects per format), `installer/`, `manual/`, `resources/`, `scripts/` (iPlug2 template build/dist scripts), `ReaperProjects/` (test sessions).
@@ -49,7 +48,7 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 
 ## Invariants you must keep
 
-- **`EParams` layout**: each of the 4 instruments has a contiguous block of exactly `kParamsPerOsc = kParamPwmAttack2 - kParamPwmAttack1` (26) params in the *same order*. `SetParam` maps any instrument param back to its Type-1 equivalent with `%`. Adding a param means adding it to all 4 blocks at the same relative offset.
+- **`EParams` layout**: each of the 4 instruments has a contiguous block of exactly `kParamsPerType` (26) params in the *same order*. `static_assert`s in `Params.h` enforce this. Parameter init, UI rows and `SetParam` all use `TypeParam(type, kParamXxx1)`. Adding a param means adding it to all 4 blocks at the same relative offset, then once in the init and UI loops. **Never reorder or insert params before existing ones**: hosts store params by index.
 - **`EModulations` ordering**: lanes are grouped per kind (all pitch-sustain, then all PWM-sustain, then pitch-LFO, then PWM-LFO), because voices index lanes as `kModXxx1 + mOscId`.
 - Sample bytes are packed **MSB first** (bit 7 = first sample) in `ReduceToOneBit`, `SampleOscillator`, `DragDropWaveformDisplay` and `BitCompression`.
 - Dynamic sample slot `i` ↔ MIDI velocity `kPreparedCount + 1 + i` (see `SampleManager::GetSampleForVelocity`).

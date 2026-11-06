@@ -43,6 +43,7 @@ public:
   std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
 
   void OnUIClose() override;
+  void OnParamChangeUI(int paramIdx, EParamSource source) override;
 
   OneBitPlusDSP<sample> mDSP{ 32 };
   IPeakSender<2> mMeterSender;
@@ -75,6 +76,8 @@ private:
   void MigrateParams(uint32_t savedDspVersion);
   // Shows the most recently imported sample in the drop box and makes it the one to audition.
   void ShowLatestSample();
+  // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.
+  void UpdateLfoRateVisibility(int type);
 
   // Set when samples were replaced off the main thread (state load); OnIdle refreshes the drop box.
   std::atomic<bool> mSamplesChanged{false};

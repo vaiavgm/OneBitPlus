@@ -168,3 +168,18 @@ enum EControlTags
   kCtrlTagOscilloscope,
   kNumCtrlTags
 };
+
+// --- Instrument ("Type") parameter blocks -------------------------------------------------------------------
+// The 4 instrument types share one layout: a block of kParamsPerType params starting at kParamPwmAttack1.
+// Use TypeParam(type, kParamXxx1) to address the same param of another type.
+constexpr int kNumTypes = 4;
+constexpr int kParamsPerType = kParamPwmAttack2 - kParamPwmAttack1;
+
+constexpr int TypeParam(int type, int type1Param) { return type1Param + type * kParamsPerType; }
+
+static_assert(kParamsPerType == 26, "instrument param block changed: update docs/ARCHITECTURE.md and SetParam");
+static_assert(TypeParam(1, kParamPwmAttack1) == kParamPwmAttack2 && TypeParam(2, kParamPwmAttack1) == kParamPwmAttack3 && TypeParam(3, kParamPwmAttack1) == kParamPwmAttack4,
+              "instrument param blocks must be contiguous");
+static_assert(TypeParam(3, kParamExtraDetune1) == kParamExtraDetune4 && TypeParam(1, kParamPitchOffset1) == kParamPitchOffset2,
+              "instrument param blocks must have identical layouts");
+static_assert(kInputProtect == kParamExtraDetune4 + 1, "global params must follow the instrument blocks");

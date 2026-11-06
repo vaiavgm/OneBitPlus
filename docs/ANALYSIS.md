@@ -38,7 +38,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - ~~🟡 `PrintBits` output goes through `MY_PRINTF`, whose buffer is 512 bytes (`Debug.h`). The generated C array is **truncated** for any sample over ~80 bytes, which makes the "print bits" workflow unusable. It is also computed twice per drop (`:675` internally and again at `:678`). Write the array to a file, or loop `OutputDebugStringA` over chunks.~~ ✅ fixed in Phase 1 (`SampleTools::ToCppArray` + `DebugPrintLong`; bytes ≥ 0x80 are emitted as `int8_t(0x..)` so they compile without narrowing errors)
 - ~~🟡 `mSamplePathsBuffer` is never sized, so `UpdateSampleListBuffer()` always returns early. The sample list UI is dead code (it is commented out at `:635-653`, `:736-741`, `:810-815`).~~ ✅ removed in Phase 2. Paths and pipelines now live in the sample slots.
 - ~~🟡 The comment in `UpdateSampleListBuffer` (`:715`) documents the 1:1 velocity mapping (B6). The README says the opposite.~~ ✅ resolved in Phase 1: the 1:1 mapping is kept on purpose and the README now documents it
-- 🟡 LFO-sync visibility is only updated in `SetAnimationEndActionFunction` (`:279-283` etc.). After loading a preset or state with `Sync = off`, the wrong rate knob (Hz vs tempo) stays visible.
+- ~~🟡 LFO-sync visibility is only updated in `SetAnimationEndActionFunction` (`:279-283` etc.). After loading a preset or state with `Sync = off`, the wrong rate knob (Hz vs tempo) stays visible.~~ ✅ fixed in Phase 3 (`OnParamChangeUI` + `UpdateLfoRateVisibility`)
 
 ### 1.2 DSP / voice (`VaiaOneBitPlus_DSP.h`)
 
@@ -72,7 +72,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - 🟠 **Truncated or streaming WAVs** (data chunk size larger than the file, or `0xFFFFFFFF`) hit the `break` at `:168` before `data` is found, so they are rejected. The clamp at `:200` is then unreachable for the `data` chunk.
 - ~~🔴 **32-bit float WAV: full scale flips sign.** `f * 2147483647.0f` rounds to 2^31 in float, which overflows `int32` (UB, in practice `INT32_MIN`), so every full-scale positive peak was imported as full-scale negative.~~ ✅ found by the Phase 0 tests, fixed in Phase 1 (scale in double)
 - 🟠 **No user feedback on failure.** Errors go to `std::cerr`, which is invisible in a plugin.
-- 🟡 `SampleTools::Normalize` takes `std::abs(INT32_MIN)`, which is UB. `SampleTools::Saturate` converts `tanh(..)*2^31` to `int32`, which overflows. Both functions, and `SampleTools::LowPassFilter`, are **unused** duplicates of the `IAudioEffect` classes. Delete them.
+- ~~🟡 `SampleTools::Normalize` takes `std::abs(INT32_MIN)`, which is UB. `SampleTools::Saturate` converts `tanh(..)*2^31` to `int32`, which overflows. Both functions, and `SampleTools::LowPassFilter`, are **unused** duplicates of the `IAudioEffect` classes. Delete them.~~ ✅ removed in Phase 3
 - 🟡 `BiquadFilterEffect` cascades identical Q = 0.707 sections (`IAudioEffect.h:303`). That is not a Butterworth response for order > 2 (it is −6 dB at fc for order 4, etc.). Use the per-stage Butterworth Q values.
 - 🟡 `snarePipeline2` (HP 400 Hz → LP 100 Hz) is effectively a null filter. It is unused, but the presets in `ReloadSamples` are worth reviewing before re-enabling them.
 - ~~🟡 Missing includes: `IAudioEffect.h` uses `std::clamp`/`std::pow`/`std::tanh` without `<algorithm>`/`<cmath>`. `TrellisQuantizer.h` uses `std::numeric_limits` without `<limits>`. There is a circular include `IAudioEffect.h ↔ TrellisQuantizer.h`, and `TrellisQuantizer.h` doesn't need `IAudioEffect.h`.~~ ✅ fixed in Phase 0
@@ -88,7 +88,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 
   Chunked mode runs the **first-order** trellis, while the non-chunked path runs the **3rd-order psychoacoustic** trellis (`:498-506`). Any sample longer than ~0.9 s therefore gets a completely different noise shaper. The RAM budget is also meaningless for the psychoacoustic path, which always uses 32-sample chunks (`:350`), and the 24-byte node estimate is wrong for its ~40-byte `Node`.
 - 🟠 **The psychoacoustic trellis isn't a true Viterbi.** States are binned on `current_error` only (`:417`), but the path cost depends on `(e1, e2, e3)`. Paths with different histories are merged arbitrarily. Combined with a 3rd-order NTF and inputs normalized and saturated to ±1, the modulator runs in overload. The exact errors are unbounded while the bin index clamps at ±3, so it can go unstable and produce limit cycles. Consider bounding the input (e.g. ×0.5-0.7) or using a stable NTF.
-- 🟡 Three near-identical trellis implementations exist (`SinglePass`, `Chunked`, `ApplyTrellisQuantization`). Two of them are unused.
+- ~~🟡 Three near-identical trellis implementations exist (`SinglePass`, `Chunked`, `ApplyTrellisQuantization`). Two of them are unused.~~ ✅ removed in Phase 3 (the two unused variants)
 
 ### 1.6 Compression analyzer (`BitCompression.h`, `CompressionAnalyzer/`)
 
@@ -100,7 +100,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 ### 1.7 GUI controls
 
 - 🟡 *(Phase 2: the waveform is now restored after loading state or reopening the editor.)* `DragDropWaveformDisplay::SetWaveformData`: when `totalBits < width`, `samplesPerPixel < 1` leaves empty pixel ranges with `min = 1, max = -1`, which draw inverted lines. The waveform is not restored after loading state, and multi-file drops (`OnDropMultiple`) are not supported.
-- 🟡 `IScrollContainer` isn't attached anywhere (dead code). If it is revived, the child receives no mouse events and is never attached to the graphics context.
+- ~~🟡 `IScrollContainer` isn't attached anywhere (dead code). If it is revived, the child receives no mouse events and is never attached to the graphics context.~~ ✅ removed in Phase 3
 
 ---
 
@@ -110,7 +110,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 |---|---|
 | Params | `kInputDither` and `kInputProtect` are declared and shown in the UI, but the DSP ignores them (`SetParam`: “not implemented”). |
 | Params | Pitch Keytrack has no effect (see above). The four Release params are inaudible (B9). |
-| Params | Host-visible names are identical across the 4 instruments ("Attack", "LFO Rate", …), and "LFO Rate" is even duplicated *within* one instrument (Hz vs tempo). Automation lanes are indistinguishable. Prefix the names with "T1 PWM Attack" etc. |
+| Params | ✅ *Phase 3: names are now "T1 PWM Attack", "T1 PWM LFO Rate Hz" / "… Rate Sync", etc. Indices, ranges and defaults are unchanged.* Originally: host-visible names were identical across the 4 instruments ("Attack", "LFO Rate", …), and "LFO Rate" is even duplicated *within* one instrument (Hz vs tempo). Automation lanes are indistinguishable. Prefix the names with "T1 PWM Attack" etc. |
 | Presets | `kNumPresets = 1`, and no factory presets or `MakePreset` calls exist. |
 | Samples | No sample management: you can't remove, reorder or replace samples. Every drop appends (max 127). There's no list UI and no waveform after reload. |
 | Samples | There is no velocity distribution mode matching the README ("equally distributed"). Velocity is mapped 1:1 to slots. |
@@ -118,7 +118,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 | Samples | ~~Heavy import (Lanczos plus trellis, which can take seconds) runs **synchronously on the UI thread** and freezes the editor.~~ ✅ Phase 2: `SampleImportWorker` renders on a background thread, and `OnIdle` updates the drop box. |
 | MIDI/MPE | `PLUG_DOES_MPE 1`, but timbre and pressure are ignored (`mTimbreBuffer` is written and never read). Program change is routed but unhandled. All MIDI is echoed to MIDI out, which can loop back in some hosts. |
 | UI | No keyboard, pitch-bend wheel, meter, LFO visualiser or scope, even though the senders and control tags exist (`mMeterSender`, `mLFOVisSender`, `mOscilloscopeVisSender`, `kCtrlTagBender`, …). `OnIdle()` is empty, and `OnMessage` handles a bender that doesn't exist. |
-| UI | The layout is hand-copied 4× (~370 lines). The three `IVStyle`s differ only in font sizes. |
+| UI | ~~The layout is hand-copied 4× (~370 lines). The three `IVStyle`s differ only in font sizes.~~ ✅ Phase 3: one loop over the types and a `MakeStyle` helper (the unused `LARGER_LABEL` was dropped). |
 | Config | Template leftovers: `PLUG_URL_STR` (iplug2.github.io), `AAX_TYPE_IDS 'IPI1','IPI2'` (collide with every other iPlug2 template plugin), `AAX_PLUG_NAME_STR "OneBitPlus\nIPIS"`, placeholder `changelog.txt`/`known-issues.txt`. |
 | Config | `PLUG_CHANNEL_IO "2-2"` on an instrument (`PLUG_TYPE 1`). It should be `"0-2"`: the inputs are never used, and hosts may treat it as an effect. |
 | Portability | ✅ *Phase 0: `Debug.h` is guarded with `_WIN32`, `<windows.h>`/`<format>` are gone from `VaiaOscillator.h`, `this->`-qualified members are used, the enums moved to `src/Params.h` (which removes the circular include), unused narrowing `int8_t` arrays were removed, and the sources pass a clang syntax check. Remaining: the macOS/iOS project files still don't list the `src/` headers, and the Debug/Release C++ standard mismatch.* Originally: effectively **Windows/MSVC only**. `Debug.h` declares `__declspec(dllimport)` Win32 functions unconditionally. `VaiaOscillator.h` includes `<windows.h>` and `<format>`. Code relies on MSVC permissive mode (`char*` from a literal, unqualified dependent-base members, `EParams` used in `VaiaOneBitPlus_DSP.h` before it is declared because of the circular include with `VaiaOneBitPlus.h`). The macOS/iOS/web project files exist but almost certainly don't build, and the macOS Xcode project doesn't list most `src/` headers. VST3 Debug is `stdcpp17` while Release is `stdcpp20` (`<format>` needs C++20). |
@@ -140,7 +140,7 @@ Hot path: per sample × per voice (32) × per unison (up to 8).
 | P5 | 🟡 | `mInputs[kVoiceControlTimbre].Write(...)` per voice per block, never read | `DSP.h:370` | Remove |
 | P6 | 🟡 | The param smoother processes all 17 modulation lanes, including the 8 LFO lanes that are immediately overwritten | `DSP.h:507` | Smooth only the gain and sustain lanes |
 | P7 | 🟡 | `SetParam` → `ForEachVoice` + `dynamic_cast` per voice per param change. `OnReset` pushes all 108 params, i.e. 108 × 32 casts | `DSP.h:618-633` | Use `static_cast` (all voices are `Voice`), or keep a typed voice array |
-| P8 | 🟡 | 8 LFO members plus 4 hand-written `ProcessBlock`/`SetSampleRate` calls | `DSP.h:507-527, 563-573` | Use `std::array<LFO<T>,4>` loops (also removes duplication) |
+| ~~P8~~ ✅ P3 | 🟡 | 8 LFO members plus 4 hand-written `ProcessBlock`/`SetSampleRate` calls | `DSP.h:507-527, 563-573` | Use `std::array<LFO<T>,4>` loops (also removes duplication) |
 | P9 | 🟠 | Trellis: `std::vector<std::vector<Node>>` is allocated **per 32-sample chunk** (≈1 500 chunks × 33 vectors for 1 s @ 48 k) | `TrellisQuantizer.h:379` | Allocate one flat buffer and reuse it across chunks |
 | ~~P10~~ ✅ P2 | 🟠 | The whole import runs on the UI thread: read whole file → int32 → Lanczos (2 `sin` per tap, ~7-14 taps) → double → effects → trellis | `VaiaOneBitPlus.cpp:662-680` | Use a worker thread with a progress indicator, and hand the result to the DSP via the bank swap from B3 |
 | P11 | 🟡 | Redundant `int32 ↔ double` conversions (the resampler works in int32, the pipeline in double) | `SampleTools.h:21-128, 194-199` | Convert to double once, after loading |
@@ -165,7 +165,7 @@ Decisions (from review):
 | 0 | Safety net: unit tests, includes and portability, clang syntax check | no | ✅ done |
 | 1 | Quick correctness fixes (B1, B5, B7, loader float overflow, BitCompression, PrintBits, README) | no (new imports of full-scale float WAVs are now correct) | ✅ done |
 | 2 | Sample lifecycle: immutable sample bank (B3), keep samples on a rate change (B2), state v2 + migration hook (`dspVersion`, `MigrateParams`), validation, background import. VST2 chunks deliberately left off. | no (keeps samples that used to be lost) | ✅ done |
-| 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ⏳ |
+| 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ✅ done |
 | 4 | Performance that gives identical output (cached detune ratios, `static_cast`, trellis buffer reuse, no timbre write, no copies) | no | ⏳ |
 | 5 | UI: meter, scope, LFO visualiser, keyboard and pitch wheel | no | ⏳ |
 | 6 🎧 | Sound: B4 sample rate, B8 tempo, B9 release (with migration), B10 DC blocker, noise fixes, PWM wrap, Pitch Keytrack, control-rate pitch | **yes** | waiting for the listening session |

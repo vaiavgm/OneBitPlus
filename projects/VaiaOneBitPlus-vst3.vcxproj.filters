@@ -423,8 +423,17 @@
     <ClInclude Include="..\src\DragDropWaveformDisplay.h">
       <Filter>src\GUI</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\IScrollContainer.h">
-      <Filter>src\GUI</Filter>
+    <ClInclude Include="..\src\Params.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PipelinePresets.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleImportWorker.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\StateFormat.h">
+      <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\BitCompression.h">
       <Filter>src\BitCompression</Filter>
