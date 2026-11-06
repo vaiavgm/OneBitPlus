@@ -718,14 +718,6 @@ public:
     case kParamGain:
       mParamsToSmooth[kModGainSmoother] = (T)value / 100.;
       break;
-
-    case kInputProtect:
-      // not implemented
-      break;
-
-    case kInputDither:
-      // not implemented
-      break;
     }
   }
 

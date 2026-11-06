@@ -148,9 +148,11 @@ enum EParams
 
 
 
-  // external signal modulation
-    kInputProtect,
-  kInputDither,
+  // Retired: "Input Protection" and "Input Dither" did nothing (the synth has no audio input). The two slots
+  // stay, because iPlug2 saves and restores parameters as a fixed-length run: removing them would shift the
+  // rest of the saved state of every existing project. They are hidden from the UI and can't be automated.
+  kParamUnused1,
+  kParamUnused2,
 
   kNumParams
 };
@@ -182,4 +184,4 @@ static_assert(TypeParam(1, kParamPwmAttack1) == kParamPwmAttack2 && TypeParam(2,
               "instrument param blocks must be contiguous");
 static_assert(TypeParam(3, kParamExtraDetune1) == kParamExtraDetune4 && TypeParam(1, kParamPitchOffset1) == kParamPitchOffset2,
               "instrument param blocks must have identical layouts");
-static_assert(kInputProtect == kParamExtraDetune4 + 1, "global params must follow the instrument blocks");
+static_assert(kParamUnused1 == kParamExtraDetune4 + 1, "global params must follow the instrument blocks");

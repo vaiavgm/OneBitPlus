@@ -19,8 +19,9 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
-  GetParam(kInputDither)->InitPercentage("Input Dither", 0., 0., 100.);
-  GetParam(kInputProtect)->InitPercentage("Input Protection", 0., 0., 100.);
+  // retired params: kept only so that saved states keep their layout (see Params.h)
+  GetParam(kParamUnused1)->InitDouble("(unused 1)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
+  GetParam(kParamUnused2)->InitDouble("(unused 2)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
 
   // Instrument types I-IV: identical parameter blocks (see Params.h). Ranges, defaults and the order of
   // the parameters are unchanged from the original per-type code. Only the display names got a "T<n>" prefix,
@@ -125,9 +126,6 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new ITextControl(IRECT(1070.0, 0.0f, 1220.0, 20.0f), "Extras", HEADER_TEXT));
 
 
-    pGraphics->AttachControl(new IVSliderControl(IRECT(00.0, 35.0f + 440, 80.0, 120.0f + 440), kInputDither, "Dither", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + 440, 360.0, 90.0f + 440), kInputProtect, "Input Protection", DEFAULT_STYLE.WithShowLabel(false), true, EDirection::Vertical));
 
     //////////////// INSTRUMENT ROWS (Type I at the bottom, Type IV at the top)
     static const char* kTypeNames[kNumTypes] = {"Type I", "Type II", "Type III", "Type IV"};

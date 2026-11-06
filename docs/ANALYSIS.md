@@ -109,7 +109,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 
 | Area | Gap |
 |---|---|
-| Params | `kInputDither` and `kInputProtect` are declared and shown in the UI, but the DSP ignores them (`SetParam`: “not implemented”). |
+| Params | ~~`kInputDither` and `kInputProtect` are declared and shown in the UI, but the DSP ignores them.~~ ✅ Phase 6: removed from the UI and the DSP. The two parameter slots stay as hidden "(unused)" placeholders (not automatable), because iPlug2 saves parameters as a fixed-length run and removing them would break the saved state of every existing project. Dither, if wanted, belongs in the import pipeline (`DitherEffect` already exists), not in a global setting. A DC filter is an output stage and is added separately. |
 | Params | Pitch Keytrack has no effect (see above). The four Release params are inaudible (B9). |
 | Params | ✅ *Phase 3: names are now "T1 PWM Attack", "T1 PWM LFO Rate Hz" / "… Rate Sync", etc. Indices, ranges and defaults are unchanged.* Originally: host-visible names were identical across the 4 instruments ("Attack", "LFO Rate", …), and "LFO Rate" is even duplicated *within* one instrument (Hz vs tempo). Automation lanes are indistinguishable. Prefix the names with "T1 PWM Attack" etc. |
 | Presets | `kNumPresets = 1`, and no factory presets or `MakePreset` calls exist. |
@@ -175,5 +175,4 @@ Decisions (from review):
 
 - **A. FX-chain pipeline builder.** A minimal GUI for picking the import effects and quantizer, with their parameters, instead of the hard-coded drop lambda. The chain would be stored per sample (it already is, as a string: `mSamplePipelines`). Needs: an effect factory from that string, and a small list/editor control.
 - **B. Correct note release.** *(Groundwork in Phase 2: state v2 stores a `dspVersion` (currently 1), and `VaiaOneBitPlus::MigrateParams` is the hook. Phase 6 bumps it to 2 and resets the Release params when loading older states.)* Release stages are currently inaudible (B9). Once release works, existing projects would start sounding different, so state migration resets **all 8 Release params to 0** for states saved before the fix. The fix-era version is v2. "v1" is the current sample-block version, and unversioned or param-only states count as v1. Caveat: hosts that restore by parameter values instead of the state chunk (VST2 without chunks) can't be migrated.
-- The Dither slider overlaps the drop box. It is left as-is for now because both Dither and Input Protect are inactive: decide in Phase 6 whether to implement or remove them.
 - Changing `PLUG_CHANNEL_IO` to `"0-2"` and replacing the template AAX/URL IDs: hygiene only, kept as-is for compatibility.
