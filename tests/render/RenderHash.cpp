@@ -8,6 +8,7 @@
 //   48000 Hz: 0bf6817515ca0ac7      44100 Hz: b61090932549d1df
 // The current code rendering "legacy" at HOST_TEMPO 140 must print exactly these. That is the proof that
 // projects loaded in legacy mode keep their sound.
+// Sampler Pitch is off in all of these; "samplerpitch" switches it on (48000 Hz: 1c839245eecd6537, 44100 Hz: d74f027df3a35323).
 // Current code, non-legacy (HOST_TEMPO 140):  48000 Hz: 434fe5a91a646863      44100 Hz: 8fdb21257b0ef52f
 // Non-legacy hashes change whenever the sound is changed on purpose: update them in the commit that does it.
 #include "VaiaOneBitPlus_DSP.h"
@@ -33,11 +34,12 @@ int main(int argc, char** argv)
   const double sr = argc > 1 ? atof(argv[1]) : 48000.0;
   // "legacy" renders like a project saved by the original version (see src/StateFormat.h, kCompatLegacyTiming)
   // "nodc" switches the output DC blocker off (to compare with the original code, which has none)
-  bool legacy = false, noDc = false;
+  bool legacy = false, noDc = false, samplerPitch = false;
   for (int a = 2; a < argc; ++a)
   {
     legacy |= std::strcmp(argv[a], "legacy") == 0;
     noDc |= std::strcmp(argv[a], "nodc") == 0;
+    samplerPitch |= std::strcmp(argv[a], "samplerpitch") == 0; // switch Sampler Pitch on (off by default)
   }
   const int bs = 256;
   auto* dsp = new OneBitPlusDSP<sample>(32);
@@ -55,6 +57,9 @@ int main(int argc, char** argv)
 #ifndef ONEBIT_NO_LEGACY_API // defined when building against the original code, which has no legacy switch
   dsp->mLegacyTiming = legacy;
   dsp->mDcBlockerEnabled = !noDc;
+#endif
+#ifndef ONEBIT_NO_LEGACY_API
+  dsp->SetParam(kParamSamplerPitch, samplerPitch ? 1. : 0.);
 #endif
   FILE* dump = nullptr;
   for (int a = 2; a + 1 < argc; ++a)
@@ -107,5 +112,5 @@ int main(int argc, char** argv)
     if (dump) std::fwrite(L.data(), sizeof(sample), bs, dump);
   }
   if (dump) std::fclose(dump);
-  std::printf("sr=%.0f %s%s hash=%016llx nonzero=%ld\n", sr, legacy ? "legacy" : "new   ", noDc ? " nodc" : "     ", gHash, gNonZero);
+  std::printf("sr=%.0f %s%s%s hash=%016llx nonzero=%ld\n", sr, legacy ? "legacy" : "new   ", noDc ? " nodc" : "     ", samplerPitch ? " samplerpitch" : "", gHash, gNonZero);
 }

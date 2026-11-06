@@ -324,8 +324,8 @@ public:
     {
       if (sampleOsc && algo == OSC_Algorithm::ALGO_PIN_PULSE)
       {
-        // SampleOscillator already returns 1.0 or -1.0 natively
-        T sampleVal = sampleOsc->Process(440); // assume native A
+        // SampleOscillator returns 1.0 or 0.0. At 440 Hz a sample plays at its recorded speed.
+        T sampleVal = sampleOsc->Process(oscFreq);
 
         T outputVal = outputs[0][i];
 
@@ -391,6 +391,8 @@ public:
       int unison = std::clamp(extraUnisonCount, 1, static_cast<int>(mNumOscPerVoice));
       UpdateDetuneRatios(unison, extraDetuneCents);
 
+      const bool samplerPitch = mParentDSP.mSamplerPitch.load(std::memory_order_relaxed);
+
       double tempNoise4 = 0.0;
       double tempNoise8 = 0.0;
       int lastClock4 = -1;
@@ -432,7 +434,12 @@ public:
         else if (midiNote < 4)
         {
           if (velocity > 0.0)
-            ProcessSampleOscillator(outputs, i, oscFreq, &mSampleOsc);
+          {
+            // Sampler Pitch on: the sample is sped up / slowed down by pitch bend, the pitch envelope and the pitch LFO
+            // (not by the key itself: the sampler note is fixed, and keytrack would only detune it).
+            const double sampleFreq = samplerPitch ? 440.0 * pow(2.0, pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal) : 440.0;
+            ProcessSampleOscillator(outputs, i, sampleFreq, &mSampleOsc);
+          }
         }
         else if (velocity > 0.0 || mPwmEnv.GetBusy() || mPitchEnv.GetBusy())
         {
@@ -767,6 +774,9 @@ public:
     case kParamGain:
       mParamsToSmooth[kModGainSmoother] = (T)value / 100.;
       break;
+    case kParamSamplerPitch:
+      mSamplerPitch = value > 0.5;
+      break;
     }
   }
 
@@ -777,6 +787,9 @@ public:
     // Keep behaviours of projects saved before the sound changes (see StateFormat.h, ECompat). Written by the
     // UI / state thread, read by the audio thread.
     std::atomic<bool> mLegacyTiming{false};
+
+    // Sampler Pitch (kParamSamplerPitch): the sampler follows pitch bend, the pitch envelope and the pitch LFO.
+    std::atomic<bool> mSamplerPitch{false};
 
     // Output DC blocker. Only switched off by the render regression harness (tests/render) to compare with the
     // original code.

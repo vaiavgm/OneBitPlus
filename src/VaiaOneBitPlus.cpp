@@ -18,9 +18,10 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
-  // retired params: kept only so that saved states keep their layout (see Params.h)
+  // retired param: kept only so that saved states keep their layout (see Params.h)
   GetParam(kParamUnused1)->InitDouble("(unused 1)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
-  GetParam(kParamUnused2)->InitDouble("(unused 2)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
+  // Sampler Pitch: off = the sampler always plays at its recorded speed (the original behaviour)
+  GetParam(kParamSamplerPitch)->InitBool("Sampler Pitch", false);
 
   // Instrument types I-IV: identical parameter blocks (see Params.h). Ranges, defaults and the order of
   // the parameters are unchanged from the original per-type code. Only the display names got a "T<n>" prefix,
@@ -269,6 +270,9 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     pGraphics->AttachControl(mDropBox);
 
+    // The sampler plays at a fixed speed unless this is on; then it follows pitch bend, the pitch envelope and the LFO
+    pGraphics->AttachControl(new IVToggleControl(IRECT(25.0, 655.0, 165.0, 695.0), kParamSamplerPitch, "Sampler pitch", SMALLER_LABEL, "OFF", "BENDS"));
+
     // Switch for projects saved before the sound changes (it is on for them after loading, off for new instances)
     pGraphics->AttachControl(
       new IVToggleControl(IRECT(305.0, 500.0, 375.0, 560.0), [this](IControl* pCaller) { mDSP.mLegacyTiming = pCaller->GetValue() > 0.5; }, "Legacy timing", SMALLER_LABEL, "OFF", "ON"), kCtrlTagLegacyTiming);
@@ -339,6 +343,11 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
   {
     mDSP.mLegacyTiming = (data.compatFlags & OneBitState::kCompatLegacyTiming) != 0;
   }
+
+  // The slot of Sampler Pitch used to be the retired "Input Dither" knob, which could hold any value. Before
+  // dspVersion 3 the sampler never followed pitch, so such projects must load with it off.
+  if (data.dspVersion < 3)
+    ResetParam(kParamSamplerPitch, 0.);
 }
 
 void VaiaOneBitPlus::ShowLatestSample()

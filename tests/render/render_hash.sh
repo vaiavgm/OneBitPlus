@@ -16,3 +16,6 @@ clang++ -std=c++20 -O1 -w -DIPLUG_DSP=1 -DAPP_API -include memory -I. -Isrc \
 # legacy without the DC blocker must be identical to the original code (reference hashes in RenderHash.cpp)
 "$OUT" 48000 legacy nodc
 "$OUT" 44100 legacy nodc
+# Sampler Pitch on (off in all runs above)
+"$OUT" 48000 samplerpitch
+"$OUT" 44100 samplerpitch

@@ -20,3 +20,4 @@ A polyphonic 1-bit synth, made with the iPlug2 framework
 * Pitch Keytrack adds octaves per octave from A440 (0 = off).
 * Tempo-synced LFOs follow the host tempo, and samples play at their own sample rate. Projects saved by older versions are loaded with the *Legacy timing* switch on (fixed 120 BPM, samples at 44.1 kHz speed, as before) and keep their old Release and Keytrack behaviour, so they sound the same. Switch it off to use the new timing.
 * The old Dither and Input Protection knobs did nothing and are gone.
+* *Sampler pitch* (button under the drop box, off by default): when on, the sampler follows pitch bend, the pitch envelope and the pitch LFO. When off, samples always play at their recorded speed.

@@ -148,11 +148,13 @@ enum EParams
 
 
 
-  // Retired: "Input Protection" and "Input Dither" did nothing (the synth has no audio input). The two slots
-  // stay, because iPlug2 saves and restores parameters as a fixed-length run: removing them would shift the
-  // rest of the saved state of every existing project. They are hidden from the UI and can't be automated.
+  // Retired: "Input Protection" (kParamUnused1) did nothing, so its slot stays as a hidden placeholder. iPlug2 saves
+  // and restores parameters as a fixed-length run: removing or adding a slot would shift the rest of the saved state
+  // of every existing project.
   kParamUnused1,
-  kParamUnused2,
+  // Sampler Pitch (on/off) reuses the slot of the retired "Input Dither" knob. Old states may hold a stray value
+  // there, so states saved before dspVersion 3 get it reset to 0 (off) when they are loaded.
+  kParamSamplerPitch,
 
   kNumParams
 };

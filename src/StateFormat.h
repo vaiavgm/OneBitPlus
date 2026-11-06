@@ -25,6 +25,8 @@
 //                clean-up builds before the sound changes).
 //  dspVersion 2: audible release, host tempo for synced LFOs, samples at their own rate, pitch keytrack,
 //                DC-blocked output.
+//  dspVersion 3: the "Sampler Pitch" parameter (it reuses the retired Input Dither slot: states before
+//                version 3 get it reset to off).
 //
 // compatFlags are switches that keep a *behaviour* of an older version for as long as the user wants.
 // They are saved with the project (see ECompat).
@@ -42,7 +44,7 @@ constexpr uint32_t kLatestVersion = 3;
 
 // Sound-behaviour versions (see the comment at the top)
 constexpr uint32_t kDspVersionLegacy = 1;
-constexpr uint32_t kLatestDspVersion = 2;
+constexpr uint32_t kLatestDspVersion = 3;
 
 // Behaviours of older versions that a project can keep using
 enum ECompat : uint32_t
