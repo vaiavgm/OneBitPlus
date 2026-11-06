@@ -131,7 +131,8 @@ inline static std::vector<int32_t> Resample(const std::vector<int32_t>& inputBuf
   return resampled;
 }
 
-inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = CreateDefaultPipeline())
+// `preQuantizer`, if given, receives the signal after the effects and before the quantizer (for analysis / display).
+inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = CreateDefaultPipeline(), std::vector<double>* preQuantizer = nullptr)
 {
   if (inputBuffer.empty() || !pipeline.quantizer)
     return {};
@@ -151,6 +152,9 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
       effect->Process(workingBuffer, sampleRate);
     }
   }
+
+  if (preQuantizer)
+    *preQuantizer = workingBuffer;
 
   // 3. Execute the single terminal quantizer stage
   std::vector<bool> bits = pipeline.quantizer->Quantize(workingBuffer, sampleRate);

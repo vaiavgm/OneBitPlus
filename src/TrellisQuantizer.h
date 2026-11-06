@@ -347,3 +347,49 @@ public:
     return outBits;
   }
 };
+
+// --- Trellis quantizers with an explicit algorithm (TrellisQuantizer above picks one by sample length) ---
+
+// 1st-order noise shaping (error integrator), processed in chunks of 4096 samples.
+class TrellisFirstOrderQuantizer : public IQuantizer
+{
+  int m_states;
+
+public:
+  explicit TrellisFirstOrderQuantizer(int states = 65)
+    : m_states(std::max(17, states | 1))
+  {
+  }
+
+  std::string ToString() const override { char buf[64]; snprintf(buf, sizeof(buf), "TrellisFirstOrder(states=%d)", m_states); return std::string(buf); }
+
+  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t /*sampleRate*/) override
+  {
+    std::vector<bool> outBits(input.size(), false);
+    if (!input.empty())
+      ApplyTrellisQuantizationChunked(input, outBits, m_states, 4096);
+    return outBits;
+  }
+};
+
+// 3rd-order "psychoacoustic" noise shaping, processed in chunks of 32 samples.
+class TrellisThirdOrderQuantizer : public IQuantizer
+{
+  int m_states;
+
+public:
+  explicit TrellisThirdOrderQuantizer(int states = 129)
+    : m_states(std::max(17, states | 1))
+  {
+  }
+
+  std::string ToString() const override { char buf[64]; snprintf(buf, sizeof(buf), "TrellisThirdOrder(states=%d)", m_states); return std::string(buf); }
+
+  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t /*sampleRate*/) override
+  {
+    std::vector<bool> outBits(input.size(), false);
+    if (!input.empty())
+      ApplyPsychoacousticTrellis(input, outBits, m_states);
+    return outBits;
+  }
+};

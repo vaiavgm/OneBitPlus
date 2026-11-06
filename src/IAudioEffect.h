@@ -474,6 +474,61 @@ public:
 };
 
 
+// --- Fade in / fade out (linear gain ramps over the first / last milliseconds) ---
+class FadeEffect : public IAudioEffect
+{
+private:
+  double m_inMs, m_outMs;
+
+public:
+  FadeEffect(double inMs, double outMs)
+    : m_inMs(inMs)
+    , m_outMs(outMs)
+  {
+  }
+
+  void Process(std::vector<double>& buffer, uint32_t sampleRate) override
+  {
+    if (buffer.empty() || sampleRate == 0)
+      return;
+
+    const double samplesPerMs = static_cast<double>(sampleRate) / 1000.0;
+    const size_t n = buffer.size();
+    const size_t fadeIn = std::min(n, static_cast<size_t>(std::max(0.0, m_inMs) * samplesPerMs));
+    const size_t fadeOut = std::min(n, static_cast<size_t>(std::max(0.0, m_outMs) * samplesPerMs));
+
+    for (size_t i = 0; i < fadeIn; ++i)
+      buffer[i] *= static_cast<double>(i) / static_cast<double>(fadeIn);
+    for (size_t i = 0; i < fadeOut; ++i)
+      buffer[n - 1 - i] *= static_cast<double>(i) / static_cast<double>(fadeOut);
+  }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "FadeEffect(in=%g,out=%g)", m_inMs, m_outMs); return std::string(buf); }
+};
+
+
+// --- DC shift: adds a constant, then hard-clips to [-1, 1] ---
+// The plugin removes DC from its output, so a sample may carry any DC offset. A 1-bit stream with a lot of DC has
+// little room left for the signal (it is mostly 1s or mostly 0s): shifting the signal before the quantizer centres it.
+class DcOffsetEffect : public IAudioEffect
+{
+private:
+  double m_offset;
+
+public:
+  explicit DcOffsetEffect(double offset)
+    : m_offset(offset)
+  {
+  }
+
+  void Process(std::vector<double>& buffer, uint32_t /*sampleRate*/) override
+  {
+    for (double& sample : buffer)
+      sample = std::clamp(sample + m_offset, -1.0, 1.0); // |x| > 1 would make the quantizers' error state run away
+  }
+  std::string ToString() const override { char buf[128]; std::snprintf(buf, sizeof(buf), "DcOffsetEffect(%g)", m_offset); return std::string(buf); }
+};
+
+
 struct AudioPipeline
 {
   std::vector<std::shared_ptr<IAudioEffect>> effects; // 0 to N pre-processing effects

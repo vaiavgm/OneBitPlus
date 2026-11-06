@@ -51,13 +51,28 @@ struct SampleInfo
   }
 };
 
-// One imported sample: packed 1-bit data plus where it came from.
+// Source audio of a sample (mono PCM, int32 full scale, at the rate it was recorded), kept so that a sample can be
+// re-rendered with another pipeline. Immutable once created, so slots and sample banks can share it.
+struct SourceAudio
+{
+  std::vector<int32_t> pcm;
+  uint32_t sampleRate = 44100;
+};
+
+// One imported sample: packed 1-bit data plus where it came from and how it was made.
 struct Slot
 {
-  std::vector<int8_t> data;
+  std::vector<int8_t> data; // empty = the slot is free (a "hole": later slots keep their velocity)
   uint32_t sampleRate = 44100;
-  std::string path;     // source file (for display / persistence)
-  std::string pipeline; // AudioPipeline::ToString() used to render it
+  std::string path;     // source file (for display, persistence and re-rendering)
+  std::string pipeline; // pipeline (chain) text, see PipelineModel.h; legacy text from older projects is accepted
+
+  // The source audio, if it is in memory (just imported, loaded from `path` for editing, or restored from the project).
+  std::shared_ptr<const SourceAudio> source;
+  // Save the source audio inside the project (otherwise only `path` is saved and the file must still exist to edit).
+  bool embedSource = false;
+
+  bool Empty() const { return data.empty(); }
 };
 
 // --- 3. Unified Sample Manager ---
@@ -94,25 +109,65 @@ public:
 
   // ------------------------------------------------------------------ editing (non-audio threads)
 
-  // Add a packed dynamic sample. Returns its dynamic index, or -1 if all slots are used.
+  // Add a packed dynamic sample to the first free slot (a hole left by ClearSlot, otherwise the end).
+  // Returns its dynamic index, or -1 if all slots are used.
   // Dynamic index i is played by MIDI velocity kPreparedCount + 1 + i.
   int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100, std::string path = {}, std::string pipeline = {})
   {
+    Slot slot;
+    slot.data.assign(data, data + size);
+    slot.sampleRate = sampleRate;
+    slot.path = std::move(path);
+    slot.pipeline = std::move(pipeline);
+    return AddSlot(std::move(slot));
+  }
+
+  // Same, for a complete slot (with source and embed flag).
+  int AddSlot(Slot slot)
+  {
     std::lock_guard<std::mutex> lock(mEditMutex);
-    if (mCurrentOwner->slots.size() >= kMaxDynamicSlots)
+    const int index = FirstFreeLocked();
+    if (index < 0 || slot.Empty())
       return -1;
+    SetSlotLocked(index, std::move(slot));
+    return index;
+  }
 
-    auto slot = std::make_shared<Slot>();
-    slot->data.assign(data, data + size);
-    slot->sampleRate = sampleRate;
-    slot->path = std::move(path);
-    slot->pipeline = std::move(pipeline);
+  // Put a sample into a specific slot (replacing what is there). Slots in between stay free. False if the index is
+  // out of range.
+  bool SetSlot(int index, Slot slot)
+  {
+    if (index < 0 || static_cast<size_t>(index) >= kMaxDynamicSlots)
+      return false;
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    SetSlotLocked(index, std::move(slot));
+    return true;
+  }
 
-    auto bank = std::make_shared<Bank>(*mCurrentOwner); // copies shared_ptrs only, not sample data
-    bank->slots.push_back(std::move(slot));
-    const int idx = static_cast<int>(bank->slots.size() - 1);
-    PublishLocked(std::move(bank));
-    return idx;
+  // Free a slot. The slots after it keep their index, and so their velocity.
+  bool ClearSlot(int index)
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    if (index < 0 || static_cast<size_t>(index) >= mCurrentOwner->slots.size())
+      return false;
+    SetSlotLocked(index, Slot{});
+    return true;
+  }
+
+  // Index of the first free slot, or -1 if all are used.
+  int FirstFreeSlot() const
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    return FirstFreeLocked();
+  }
+
+  // The slot at an index (nullptr beyond the last used slot). A free slot is returned empty.
+  std::shared_ptr<const Slot> GetSlot(int index) const
+  {
+    auto bank = Snapshot();
+    if (index < 0 || static_cast<size_t>(index) >= bank->slots.size())
+      return nullptr;
+    return bank->slots[index];
   }
 
   void ClearDynamicSamples()
@@ -131,6 +186,7 @@ public:
         break;
       bank->slots.push_back(std::make_shared<Slot>(std::move(s)));
     }
+    TrimTrailingHoles(*bank);
     std::lock_guard<std::mutex> lock(mEditMutex);
     PublishLocked(std::move(bank));
   }
@@ -219,6 +275,31 @@ private:
     std::vector<std::shared_ptr<const Slot>> slots;
     uint64_t generation = 0;
   };
+
+  static void TrimTrailingHoles(Bank& bank)
+  {
+    while (!bank.slots.empty() && bank.slots.back()->Empty())
+      bank.slots.pop_back();
+  }
+
+  int FirstFreeLocked() const
+  {
+    const auto& slots = mCurrentOwner->slots;
+    for (size_t i = 0; i < slots.size(); ++i)
+      if (slots[i]->Empty())
+        return static_cast<int>(i);
+    return slots.size() < kMaxDynamicSlots ? static_cast<int>(slots.size()) : -1;
+  }
+
+  void SetSlotLocked(int index, Slot slot)
+  {
+    auto bank = std::make_shared<Bank>(*mCurrentOwner); // copies shared_ptrs only, not sample data
+    if (static_cast<size_t>(index) >= bank->slots.size())
+      bank->slots.resize(index + 1, std::make_shared<const Slot>()); // holes in between
+    bank->slots[index] = std::make_shared<const Slot>(std::move(slot));
+    TrimTrailingHoles(*bank);
+    PublishLocked(std::move(bank));
+  }
 
   std::shared_ptr<const Bank> Snapshot() const
   {

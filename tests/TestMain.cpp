@@ -19,6 +19,10 @@
 #include "src/SampleImportWorker.h"
 #include "src/StateFormat.h"
 #include "src/PipelinePresets.h"
+#include "src/PipelineModel.h"
+#include "src/SampleRender.h"
+#include "src/Spectrogram.h"
+#include "src/ChainPresets.h"
 #include "src/SampleLoader.h"
 #include "src/SampleTools.h"
 
@@ -45,7 +49,7 @@ struct TestCase
   std::function<void()> fn;
 };
 
-static std::vector<TestCase>& Registry()
+static std::vector<TestCase>& TestRegistry()
 {
   static std::vector<TestCase> r;
   return r;
@@ -53,7 +57,7 @@ static std::vector<TestCase>& Registry()
 
 struct Registrar
 {
-  Registrar(const char* n, std::function<void()> f) { Registry().push_back({n, std::move(f)}); }
+  Registrar(const char* n, std::function<void()> f) { TestRegistry().push_back({n, std::move(f)}); }
 };
 
 #define TEST(name)                                     \
@@ -286,6 +290,52 @@ TEST(SampleManager_SlotMetadataAndLimit)
     CHECK(m.AddSample(a, 1) >= 0);
   CHECK(m.AddSample(a, 1) == -1); // velocities 1..127 are all taken
   CHECK(m.GetSampleForVelocity(1.0).size == 1); // velocity 127 -> last slot
+}
+
+TEST(SampleManager_SlotOperationsKeepVelocities)
+{
+  SampleData::SampleManager m;
+  const int8_t a[] = {1}, b[] = {2}, c[] = {3}, d[] = {4};
+  CHECK(m.AddSample(a, 1) == 0 && m.AddSample(b, 1) == 1 && m.AddSample(c, 1) == 2);
+
+  // clearing the middle slot leaves a hole: the slot after it keeps its velocity
+  CHECK(m.ClearSlot(1));
+  CHECK(m.DynamicCount() == 3 && m.FirstFreeSlot() == 1);
+  CHECK(m.GetSampleForVelocity(2.0 / 127.0).data == SampleData::kSilence); // velocity 2 is silent now
+  CHECK(m.GetSampleForVelocity(3.0 / 127.0).data[0] == 3);                 // velocity 3 is unchanged
+
+  // the next sample fills the hole instead of being appended
+  CHECK(m.AddSample(d, 1) == 1 && m.DynamicCount() == 3);
+  CHECK(m.GetSampleForVelocity(2.0 / 127.0).data[0] == 4);
+
+  // assign to a specific slot far away: slots in between stay free
+  SampleData::Slot s;
+  s.data = {9};
+  s.path = "far.wav";
+  CHECK(m.SetSlot(9, s));
+  CHECK(m.DynamicCount() == 10 && m.GetSlot(5)->Empty() && m.GetSlot(9)->path == "far.wav");
+  CHECK(m.FirstFreeSlot() == 3);
+  CHECK(m.GetSampleForVelocity(10.0 / 127.0).data[0] == 9);
+  CHECK(!m.SetSlot(-1, s) && !m.SetSlot(static_cast<int>(SampleData::SampleManager::kMaxDynamicSlots), s));
+
+  // replacing in place keeps the index; clearing the last slots trims the trailing holes
+  s.data = {7, 7};
+  CHECK(m.SetSlot(9, s) && m.GetSlot(9)->data.size() == 2);
+  CHECK(m.ClearSlot(9) && m.DynamicCount() == 3);
+  CHECK(m.GetSlot(3) == nullptr && !m.ClearSlot(50));
+}
+
+TEST(SampleManager_SlotKeepsSourceAndEmbedFlag)
+{
+  SampleData::SampleManager m;
+  SampleData::Slot s;
+  s.data = {1, 2};
+  s.source = std::make_shared<SampleData::SourceAudio>();
+  s.embedSource = true;
+  CHECK(m.AddSlot(s) == 0);
+  auto got = m.GetSlot(0);
+  CHECK(got->embedSource && got->source == s.source);
+  CHECK(m.CopyDynamicSlots()[0].source == s.source); // shared, not copied
 }
 
 TEST(SampleManager_BankKeptWhileInUse)
@@ -540,6 +590,240 @@ TEST(PipelinePresets_Build)
   CHECK(PipelinePresets::Kick2().ToString().find("DeltaSigmaQuantizer") != std::string::npos);
 }
 
+// ---------------------------------------------------------------- PipelineModel
+using namespace PipelineModel;
+
+TEST(Chain_TextRoundTrip)
+{
+  Chain c = DefaultChain();
+  CHECK(ToText(c) == "normalize->saturate(10)->dither(0.1)->trellis(64)");
+  Chain back;
+  CHECK(ParseChain(ToText(c), back) && back == c);
+
+  // every stage type survives a round trip with non-default values
+  Chain all;
+  for (const auto& spec : Registry())
+  {
+    Stage st = DefaultStage(spec.id);
+    for (size_t i = 0; i < st.params.size(); ++i)
+      st.params[i] = ClampParam(spec.params[i], spec.params[i].min + 0.37 * (spec.params[i].max - spec.params[i].min));
+    (spec.isQuantizer ? all.quantizer : all.effects.emplace_back()) = st;
+    if (spec.isQuantizer)
+    {
+      Chain one;
+      one.effects = all.effects;
+      one.quantizer = st;
+      Chain parsed;
+      std::string err;
+      CHECK(ParseChain(ToText(one), parsed, &err) && parsed == one);
+    }
+  }
+}
+
+TEST(Chain_ParsesOldAudioPipelineText)
+{
+  // what AudioPipeline::ToString() wrote into existing projects
+  Chain c;
+  CHECK(ParseChain("NormalizeEffect->SaturateEffect(10)->DitherEffect(0.1)->TrellisQuantizer(maxRam=67108864)", c));
+  CHECK(c == DefaultChain());
+
+  // every factory recipe, built from the old pipeline text, equals the same recipe from its new text
+  struct { const char* name; AudioPipeline p; } recipes[] = {
+    {"Default", PipelinePresets::DropBox()}, {"Snare 1", PipelinePresets::Snare1()}, {"Snare 2 (nearly silent)", PipelinePresets::Snare2()},
+    {"Snare 3", PipelinePresets::Snare3()}, {"Snare 4", PipelinePresets::Snare4()}, {"Snare 5", PipelinePresets::Snare5()},
+    {"Snare 6", PipelinePresets::Snare6()}, {"Vox 1", PipelinePresets::Vox1()}, {"Vox 2", PipelinePresets::Vox2()},
+    {"Kick 1", PipelinePresets::Kick1()}, {"Kick 2", PipelinePresets::Kick2()}};
+  for (auto& r : recipes)
+  {
+    Chain fromOld, fromFactory;
+    CHECK(ParseChain(r.p.ToString(), fromOld));
+    const NamedChain* f = nullptr;
+    for (const auto& fc : FactoryChains())
+      if (fc.name == r.name)
+        f = &fc;
+    CHECK(f != nullptr);
+    if (!f)
+      continue;
+    CHECK(ParseChain(f->text, fromFactory));
+    CHECK(Build(fromFactory).ToString() == r.p.ToString()); // builds exactly the old pipeline
+    CHECK(Build(fromOld).ToString() == r.p.ToString());     // and the old text reproduces it too
+  }
+}
+
+TEST(Chain_RejectsBadText)
+{
+  Chain c = DefaultChain();
+  std::string err;
+  CHECK(!ParseChain("", c, &err));
+  CHECK(!ParseChain("normalize", c, &err) && err.find("quantizer") != std::string::npos);
+  CHECK(!ParseChain("bogus->trellis(64)", c, &err) && err.find("unknown") != std::string::npos);
+  CHECK(!ParseChain("trellis(64)->normalize->deltasigma", c, &err));
+  CHECK(!ParseChain("gain(1,2)->deltasigma", c, &err)); // too many parameters
+  CHECK(!ParseChain("gain(x)->deltasigma", c, &err));
+  CHECK(c == DefaultChain()); // unchanged on failure
+
+  // out of range values are clamped, missing ones take the default
+  CHECK(ParseChain("gain(99)->saturate->deltasigma", c));
+  CHECK(c.effects[0].params[0] == 24.0 && c.effects[1].params[0] == 2.0);
+}
+
+TEST(Chain_FadeAndDcShiftEffects)
+{
+  std::vector<double> b(1000, 1.0);
+  FadeEffect(10.0, 20.0).Process(b, 10000); // 100 samples in, 200 out
+  CHECK(b[0] == 0.0 && b[50] > 0.4 && b[50] < 0.6 && b[300] == 1.0 && b[999] == 0.0 && b[899] > 0.4 && b[899] < 0.6);
+
+  std::vector<double> d = {0.5, -0.5, 0.9};
+  DcOffsetEffect(0.3).Process(d, 44100);
+  CHECK_NEAR(d[0], 0.8, 1e-12);
+  CHECK_NEAR(d[1], -0.2, 1e-12);
+  CHECK(d[2] == 1.0); // clipped, not > 1
+}
+
+TEST(Chain_QuantizersTrackDc)
+{
+  std::vector<double> in(6000, 0.4);
+  for (const char* id : {"deltasigma", "trellis1", "trellis3"})
+  {
+    Stage q = DefaultStage(id);
+    auto bits = Build(Chain{{}, q}).quantizer->Quantize(in, 44100);
+    CHECK(bits.size() == in.size());
+    CHECK_NEAR(MeanBipolar(bits, 200), 0.4, 0.05);
+  }
+}
+
+// ---------------------------------------------------------------- SampleRender
+static SampleData::SourceAudio MakeSource(double dc, double amp = 0.3, size_t n = 8000, uint32_t rate = 44100)
+{
+  SampleData::SourceAudio s;
+  s.sampleRate = rate;
+  for (size_t i = 0; i < n; ++i)
+    s.pcm.push_back(static_cast<int32_t>(2147483647.0 * std::clamp(dc + amp * std::sin(i * 0.05), -1.0, 1.0)));
+  return s;
+}
+
+TEST(Render_MatchesDirectPipeline)
+{
+  auto src = MakeSource(0.0);
+  auto chain = DefaultChain();
+  auto r = SampleRender::Render(src, chain, 44100, true);
+  CHECK(r.ok() && r.sampleRate == 44100 && r.bits.size() == 1000 && r.preQuantizer.size() == 8000);
+  auto direct = SampleTools::ReduceToOneBit(src.pcm, 44100, Build(chain));
+  CHECK(direct == r.bits); // same bits as the old direct path
+  CHECK(SampleRender::Render(src, chain, 48000).bits.size() == 8000 * 48000 / 44100 / 8 + (((8000 * 48000 / 44100) % 8) ? 1 : 0));
+  CHECK(!SampleRender::Render(SampleData::SourceAudio{}, chain, 44100).ok());
+}
+
+TEST(Render_AutoDcCentresTheResult)
+{
+  auto src = MakeSource(0.35, 0.3); // a lot of DC
+  Chain chain;
+  CHECK(ParseChain("normalize->dcshift(0)->deltasigma", chain));
+  // normalize pushes the peak to full scale, so the DC offset of the 1-bit result is large
+  const double before = SampleRender::BitsDc(SampleRender::Render(src, chain, 44100).bits);
+  const double offset = SampleRender::FindDcOffset(src, chain, 1, 44100);
+  chain.effects[1].params = {offset};
+  const double after = SampleRender::BitsDc(SampleRender::Render(src, chain, 44100).bits);
+  CHECK(std::fabs(before) > 0.3);
+  CHECK(std::fabs(after) < 0.02);
+  CHECK(offset < 0.0 && offset >= -1.0);
+
+  // not a dcshift stage / nothing to do: 0
+  CHECK(SampleRender::FindDcOffset(src, chain, 0, 44100) == 0.0);
+  CHECK(SampleRender::FindDcOffset(src, chain, 9, 44100) == 0.0);
+  // an already balanced signal stays about where it is
+  auto balanced = MakeSource(0.0, 0.5);
+  CHECK(std::fabs(SampleRender::FindDcOffset(balanced, chain, 1, 44100)) < 0.05);
+}
+
+TEST(Render_BitsDc)
+{
+  CHECK(SampleRender::BitsDc({}) == 0.0);
+  CHECK(SampleRender::BitsDc({static_cast<int8_t>(0xFF)}) == 1.0);
+  CHECK(SampleRender::BitsDc({0x00}) == -1.0);
+  CHECK(SampleRender::BitsDc({static_cast<int8_t>(0xF0), 0x0F}) == 0.0);
+}
+
+// ---------------------------------------------------------------- Spectrogram
+TEST(Spectrogram_FindsTheTone)
+{
+  const uint32_t sr = 48000;
+  std::vector<float> x(sr);
+  for (size_t i = 0; i < x.size(); ++i)
+    x[i] = static_cast<float>(std::sin(2.0 * 3.14159265358979 * 3000.0 * i / sr));
+  auto sg = Spectrogram::Compute(x, sr, 50, 96);
+  CHECK(!sg.empty() && sg.cols == 50 && sg.rows == 96);
+  // loudest row in the middle column corresponds to 3 kHz on a log axis from 30 Hz to Nyquist (row 0 = top)
+  int best = 0;
+  for (int r = 0; r < sg.rows; ++r)
+    if (sg.At(25, r) > sg.At(25, best))
+      best = r;
+  const double fAtBest = 30.0 * std::pow(24000.0 / 30.0, static_cast<double>(sg.rows - 1 - best + 0.5) / sg.rows);
+  CHECK(fAtBest > 2400 && fAtBest < 3700);
+  CHECK(sg.At(25, best) == 255);
+  CHECK(Spectrogram::Compute({1.f, 2.f}, sr).empty()); // too short
+}
+
+TEST(Spectrogram_FftMatchesDft)
+{
+  std::vector<std::complex<double>> a(16);
+  for (int i = 0; i < 16; ++i)
+    a[i] = std::sin(i * 0.7) + 0.2 * i;
+  auto fft = a;
+  Spectrogram::Fft(fft);
+  for (int k = 0; k < 16; ++k)
+  {
+    std::complex<double> dft = 0;
+    for (int n = 0; n < 16; ++n)
+      dft += a[n] * std::polar(1.0, -2.0 * 3.14159265358979323846 * k * n / 16);
+    CHECK_NEAR(std::abs(fft[k] - dft), 0.0, 1e-9);
+  }
+}
+
+TEST(Spectrogram_DecodeAndEnvelope)
+{
+  auto bits = Spectrogram::DecodeBits({static_cast<int8_t>(0xA0)}); // 1010 0000
+  CHECK(bits.size() == 8 && bits[0] == 1.f && bits[1] == -1.f && bits[2] == 1.f && bits[3] == -1.f);
+  auto env = Spectrogram::Envelope({0.f, 1.f, -1.f, 0.5f}, 2);
+  CHECK(env.size() == 2 && env[0].hi == 1.f && env[1].lo == -1.f);
+  CHECK(Spectrogram::Envelope({}, 3).size() == 3);
+}
+
+// ---------------------------------------------------------------- ChainPresets
+TEST(Presets_FactorySaveLoadDelete)
+{
+  namespace fs = std::filesystem;
+  const fs::path base = fs::temp_directory_path() / "obp_preset_test";
+  fs::remove_all(base);
+  ChainPresets::Store store(base / "user", {base / "shared"});
+
+  auto list = store.List();
+  CHECK(list.size() == FactoryChains().size() && list[0].factory && list[0].name == "Default");
+
+  Chain c;
+  CHECK(ParseChain("normalize->fade(5,30)->dcshift(-0.12)->trellis3(65)", c));
+  std::string err;
+  CHECK(store.Save("My / Kick: 1", c, &err));
+  CHECK(!store.Save("", c, &err) && !err.empty());
+
+  // a shared folder preset, written by hand (with Windows line ends)
+  fs::create_directories(base / "shared");
+  std::ofstream(base / "shared" / "pad.obpchain", std::ios::binary) << "# x\r\nname=Pad\r\nchain=normalize->deltasigma\r\n";
+  std::ofstream(base / "shared" / "broken.obpchain") << "name=Broken\nchain=nonsense\n";
+
+  list = store.List();
+  CHECK(list.size() == FactoryChains().size() + 2); // the broken file is ignored
+  const auto& pad = list[FactoryChains().size()];   // sorted by name: "My / Kick: 1" < "Pad"
+  CHECK(pad.name == "My / Kick: 1" && pad.user && !pad.factory && pad.chain == c);
+  CHECK(list.back().name == "Pad" && !list.back().user);
+
+  CHECK(store.Delete("My / Kick: 1"));
+  CHECK(!store.Delete("My / Kick: 1") && !store.Delete("Pad")); // shared presets are never deleted
+  CHECK(store.List().size() == FactoryChains().size() + 1);
+  CHECK(ChainPresets::FileNameFor("a/b:c ") == "a_b_c.obpchain");
+  fs::remove_all(base);
+}
+
 // ---------------------------------------------------------------- BitCompression
 TEST(BitCompression_ConstantStreamCompresses)
 {
@@ -582,7 +866,7 @@ TEST(ToCppArray_IdentifierAndFormat)
 
 int main()
 {
-  for (auto& t : Registry())
+  for (auto& t : TestRegistry())
   {
     int before = gFailures;
     t.fn();
