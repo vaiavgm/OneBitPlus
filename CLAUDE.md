@@ -19,4 +19,5 @@ A polyphonic **1-bit synth and sampler** plugin (VST3 first) built on **iPlug2**
 - Primary toolchain is MSVC on Windows. Write portable C++ anyway (no new Win32-only APIs outside `Debug.h`).
 - Unit tests for the pure helpers live in `tests/` ([how to run](docs/BUILD.md#testing)). Add or extend tests when you touch the loader, resampler, quantizers, effects or `BitCompression`.
 - A change that shouldn't affect the sound must keep the render hash identical (`tests/render/`). If a change alters the sound on purpose, update the reference hashes and say so.
+- **Existing projects must keep their sound.** If you change the sound on purpose, bump `OneBitState::kLatestDspVersion`, migrate old states in `VaiaOneBitPlus::ApplyMigrations` (or gate the old behaviour with a compat flag), and prove it with the `legacy` render (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#state-format-serializestate)). Never remove or reorder parameters: add a new one only at the end of a block after checking how old states load.
 - When you fix an item from [docs/ANALYSIS.md](docs/ANALYSIS.md), strike it or remove it there.

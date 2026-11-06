@@ -35,11 +35,12 @@ MIDI ─► VaiaOneBitPlus::ProcessMidiMsg ─► mDSP.mSynth (MidiSynth / Voice
                                          │ (passed to voices as "inputs")
                                          ▼
 Voice::ProcessSamplesAccumulating, per sample:
-   midiNote < 1,2,3 → noise 1/2/3 (rand, S&H ÷1/÷4/÷8)
-   midiNote < 4     → sampler (SampleOscillator, sample chosen by velocity)
-   else             → up to 8 unison VaiaOscillators, OR-ed: any high → 1.0
+   midiNote < 1,2,3 → noise 1/2/3 (rand, S&H ÷1/÷4/÷8), stops at note-off
+   midiNote < 4     → sampler (SampleOscillator, sample chosen by velocity), stops at note-off
+   else             → up to 8 unison VaiaOscillators, OR-ed: any high → 1.0; keeps sounding
+                      until both envelopes have finished their release
                                          │
-OneBitPlusDSP::ProcessBlock output stage: |x|<eps → 0, x>0 → +gain, x<0 → −gain
+OneBitPlusDSP::ProcessBlock output stage: |x|<eps → 0, x>0 → +gain, x<0 → −gain, then a 10 Hz DC blocker
 ```
 
 ## Instrument ("Type") selection
@@ -52,7 +53,8 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 - **`EModulations` ordering**: lanes are grouped per kind (all pitch-sustain, then all PWM-sustain, then pitch-LFO, then PWM-LFO), because voices index lanes as `kModXxx1 + mOscId`.
 - Sample bytes are packed **MSB first** (bit 7 = first sample) in `ReduceToOneBit`, `SampleOscillator`, `DragDropWaveformDisplay` and `BitCompression`.
 - Dynamic sample slot `i` ↔ MIDI velocity `kPreparedCount + 1 + i` (see `SampleManager::GetSampleForVelocity`).
-- Notes 0-3 are special (noise ×3, sampler). Everything else is the synth.
+- Notes 0-3 are special (noise ×3, sampler). Everything else is the synth. Noise and sampler notes stop at note-off, synth notes release.
+- Parameter slots are never removed or reordered: iPlug2 saves parameters as a fixed-length run, so removing one shifts the rest of the saved state of every old project (that's why `kParamUnused1/2` exist).
 
 ## Threading
 
@@ -71,6 +73,7 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 
 - **v0**: no block (params only).
 - **v1**: `u32 1, u32 n, n×{u32 sr, u32 size, bytes}, u32 m, m×{str path, str pipeline}`. Read-only.
-- **v2** (written now): `u32 2, u32 dspVersion, u32 n, n×{u32 sr, u32 size, bytes, str path, str pipeline}`.
+- **v2**: `u32 2, u32 dspVersion, u32 n, n×{u32 sr, u32 size, bytes, str path, str pipeline}`. Read-only.
+- **v3** (written now): `u32 3, u32 dspVersion, u32 compatFlags, u32 n, n×{…as v2}`.
 
-`dspVersion` is the sound-behaviour version the state was saved with. When it is older than `OneBitState::kLatestDspVersion`, `VaiaOneBitPlus::MigrateParams` adjusts parameters so that old projects keep their sound.
+`dspVersion` is the sound-behaviour version the state was saved with (1 = original behaviour, 2 = Phase 6). When it is older than 2, `VaiaOneBitPlus::ApplyMigrations` resets the parameters that did nothing before (Release, Pitch Keytrack) and turns on `kCompatLegacyTiming`, which keeps the original tempo (fixed 120 BPM), sample-playback and smoothing behaviour. `compatFlags` are saved with the project, and the "Legacy timing" switch in the editor changes them. **When you change the sound on purpose again**, bump `kLatestDspVersion`, add a migration step, and add the render hash for it. See [ANALYSIS.md](ANALYSIS.md#5-legacy-projects-and-migration-phase-6).

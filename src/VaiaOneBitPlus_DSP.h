@@ -542,6 +542,23 @@ public:
     default:
       break;
     }
+
+    // The voices only ever output 0 or +gain, so the signal sits on a large DC offset. Remove it with a one-pole
+    // high-pass (10 Hz): y[n] = x[n] - x[n-1] + R * y[n-1]. The audible (AC) part is unchanged. The output is
+    // mono (both channels are equal), so one filter is enough.
+    if (mDcBlockerEnabled.load(std::memory_order_relaxed))
+    {
+      for (int s = 0; s < nFrames; s++)
+      {
+        const T x = outputs[0][s];
+        T y = x - mDcX1 + mDcR * mDcY1;
+        if (std::abs(y) < static_cast<T>(1e-9))
+          y = 0; // below -180 dB: true silence, and no denormals
+        mDcX1 = x;
+        mDcY1 = y;
+        outputs[0][s] = outputs[1][s] = y;
+      }
+    }
   }
 
   // Tell the SampleManager which sample banks voices still read from, so replaced banks can be freed
@@ -560,6 +577,8 @@ public:
 
   void Reset(double sampleRate, int blockSize)
   {    mSampleRate = sampleRate;
+    mDcR = std::exp(-2.0 * 3.14159265358979323846 * kDcBlockerHz / sampleRate);
+    mDcX1 = mDcY1 = 0;
     mSmootherIsLegacy = !mLegacyTiming.load(); // re-apply the smoothing time on the next block
 
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
@@ -758,6 +777,13 @@ public:
     // Keep behaviours of projects saved before the sound changes (see StateFormat.h, ECompat). Written by the
     // UI / state thread, read by the audio thread.
     std::atomic<bool> mLegacyTiming{false};
+
+    // Output DC blocker. Only switched off by the render regression harness (tests/render) to compare with the
+    // original code.
+    std::atomic<bool> mDcBlockerEnabled{true};
+    static constexpr double kDcBlockerHz = 10.;
+    double mDcR = 0.9987; // set in Reset
+    T mDcX1 = 0, mDcY1 = 0;
 
     static constexpr double kSmoothTimeMs = 5.; // LogParamSmooth's default
     double mSampleRate = 44100.;

@@ -13,3 +13,6 @@ clang++ -std=c++20 -O1 -w -DIPLUG_DSP=1 -DAPP_API -include memory -I. -Isrc \
 "$OUT" 44100
 "$OUT" 48000 legacy
 "$OUT" 44100 legacy
+# legacy without the DC blocker must be identical to the original code (reference hashes in RenderHash.cpp)
+"$OUT" 48000 legacy nodc
+"$OUT" 44100 legacy nodc

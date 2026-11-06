@@ -20,7 +20,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 | ~~B7~~ ✅ | 🟠 | The click-preview sends MIDI **out to the host** (`SendMidiMsg`) instead of to the plugin's own DSP | `VaiaOneBitPlus.cpp:683-694` |
 | ~~B8~~ ✅ | 🟠 | Tempo is never passed to the DSP, so tempo-synced LFOs always run at 120 BPM | `VaiaOneBitPlus.cpp:865` |
 | ~~B9~~ ✅ | 🟠 | Release stages are inaudible: the gate drops to 0 on note-off and the voice is muted at once | `VaiaOneBitPlus_DSP.h:366, 413-435` |
-| B10 | 🟠 | Output is unipolar (0 / +gain), which puts a large DC offset on the output and wastes half the headroom | `VaiaOneBitPlus_DSP.h:533-555` |
+| ~~B10~~ ✅ | 🟠 | Output is unipolar (0 / +gain), which puts a large DC offset on the output and wastes half the headroom | `VaiaOneBitPlus_DSP.h:533-555` |
 
 ---
 
@@ -46,22 +46,22 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - ~~🔴 **B4: sample rate lost.** `mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);` (`:254`) omits `sampleInfo.sampleRate`, so the 44 100 default is used. Samples are rendered at the host rate (`ImportSample` → `targetSampleRate`), so at 48 kHz they play about 8 % slow and flat.~~ ✅ fixed in Phase 6: samples play at their own rate. Projects saved before this keep the old 44.1 kHz-speed playback through the "Legacy timing" switch.
 - ~~🟠 **B9: release is inaudible.** The VoiceAllocator sets `kVoiceControlGate` to 0 on note-off (iPlug2 `VoiceAllocator::StopVoice`). The voice computes `velocity` from the gate's `endValue` (`:366`), and every branch at `:415-434` requires `velocity > 0`. The voice therefore goes silent immediately on note-off, while `GetBusy()` keeps it allocated through the PWM and pitch release. The four PWM and four pitch *Release* parameters have no audible effect. Store the trigger velocity in `Trigger()` and gate on envelope state instead.~~ ✅ fixed in Phase 6: synth notes keep sounding while an envelope releases. Noise and sampler notes still stop at note-off (by design). Saved states from before get all 8 Release values reset to 0, which reproduces the old sound bit for bit.
 - 🟠 **Gate is block-quantized.** Using `.endValue` for the gate and pitch means that inside a MidiSynth sub-block (default 32 samples) a note-off silences the whole sub-block, even the samples before the event offset.
-- 🟠 **B10: DC offset.** Voices only ever write `>= 0` (noise is clamped to 0 / 1.1, oscillators write 1.0, the sampler returns 0/1). The output stage maps `>0 → +gain` and `≈0 → 0` (`:533-555`). The result is a 0/+g pulse train: a large DC component, and only half the bipolar range used. Map to ±gain while any voice is active, add a DC blocker, or both.
-- 🟠 **Noise uses `rand()`.** `ProcessNoise1/2/3` (`:279-314`) call `rand()`, which is not real-time safe (global state, possibly locked by the CRT), is shared across voices and instances, and only gives 15 bits. A per-voice `Rand()` LCG already exists (`:463`) but is never used.
-- 🟠 **Noise operator precedence.** `outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1` parses as `((acc + r) > thr) ? …`. The *accumulated output of other voices* (0 or 1.1) feeds into this voice's random threshold, so noise density changes with whatever else is playing. Almost certainly unintended.
-- 🟠 **Noise S&H resets each block.** `clock4 = i / 4` and `clock8 = i / 8` use the in-block index, and `lastClock*` are locals. Hold phases restart at every MidiSynth sub-block boundary. Keep a per-voice sample counter instead.
-- 🟠 **Sampler ignores pitch and has no one-shot mode.** `sampleOsc->Process(440)` (`:321`) is hard-coded, so neither pitch-bend nor pitch envelopes reach the sampler. Combined with B9, a drum hit stops dead on note-off. The comment at `:320` (“returns 1.0 or -1.0”) is wrong: it returns 0/1. The `outputVal < 0.1f` guard (`:325`) is odd and makes sampler output depend on the other voices.
+- ~~🟠 **B10: DC offset.** Voices only ever write `>= 0` (noise is clamped to 0 / 1.1, oscillators write 1.0, the sampler returns 0/1). The output stage maps `>0 → +gain` and `≈0 → 0` (`:533-555`). The result is a 0/+g pulse train: a large DC component, and only half the bipolar range used. Map to ±gain while any voice is active, add a DC blocker, or both.~~ ✅ fixed in Phase 6: a 10 Hz one-pole DC blocker on the output. The audible part is unchanged (peak level is the same too, but the signal is now centred around 0). It also applies to legacy projects.
+- 🟠 **Noise uses `rand()`.** `ProcessNoise1/2/3` (`:279-314`) call `rand()`, which is not real-time safe (global state, possibly locked by the CRT), is shared across voices and instances, and only gives 15 bits. A per-voice `Rand()` LCG already exists (`:463`) but is never used. **Decision: noise stays as it is** (see below). `rand()` is believed to be lock-free on MSVC (per-thread state), so this is left alone.
+- 🟠 **Noise operator precedence.** `outputs[0][i] + (rand() % 255) > noiseThreshold ? -0.9 : 1.1` parses as `((acc + r) > thr) ? …`. The *accumulated output of other voices* (0 or 1.1) feeds into this voice's random threshold, so noise density changes with whatever else is playing. Almost certainly unintended. **Decision: kept on purpose.** Because the other voices feed the threshold, a noise note can overlap a note or be muted by one, which is a feature.
+- 🟠 **Noise S&H resets each block.** `clock4 = i / 4` and `clock8 = i / 8` use the in-block index, and `lastClock*` are locals. Hold phases restart at every MidiSynth sub-block boundary. Keep a per-voice sample counter instead. **Decision: noise stays as it is.**
+- 🟠 **Sampler ignores pitch and has no one-shot mode.** `sampleOsc->Process(440)` (`:321`) is hard-coded, so neither pitch-bend nor pitch envelopes reach the sampler. Combined with B9, a drum hit stops dead on note-off. The comment at `:320` (“returns 1.0 or -1.0”) is wrong: it returns 0/1. The `outputVal < 0.1f` guard (`:325`) is odd and makes sampler output depend on the other voices. **Decision: the sampler keeps stopping on release (no one-shot).** Following pitch bend and the pitch envelope is still open.
 - 🟠 **`pwmKeyTrack` is `bool`** (`:143`) but is assigned from a `double` param. That's fine as long as the param stays a bool, but it is inconsistent with `OscPreset::pwmKeyTrack` (`double`).
 - ~~🟠 **Pitch Keytrack does nothing.** `pitchKeyTrackStrength` is stored (`:146, :241, :708`) but never read in `ProcessSamplesAccumulating`, so the four "Pitch Keytrack" knobs are dead.~~ ✅ implemented in Phase 6 as extra octaves per octave from A440 (`pitch * (1 + keytrack)` in the exponent; 0 = off). Saved states from before get Pitch Keytrack reset to 0, because it had no effect then.
-- 🟡 `midiNote = pitch * 12.0 + 69.1` (`:368`): the `+0.1` is a fudge factor to make the `< 1/2/3/4` comparisons robust. Use the voice's integer key (`mKey`) instead.
+- 🟡 `midiNote = pitch * 12.0 + 69.1` (`:368`): the `+0.1` is a fudge factor to make the `< 1/2/3/4` comparisons robust. Use the voice's integer key (`mKey`) instead. Phase 6: kept as is. The voice type is still picked from the pitch.
 - 🟡 `GetBusy()` returns `false` for the noise/sampler modes, but `mMode` is always set to `kSynth*` in `Trigger`, so the check is dead. The mode is chosen per sample from `midiNote`, not from `mMode`. Decide the voice type once in `Trigger` (the noise/sampler branch can be chosen from `mKey`).
 - ~~🟡 **Smoothing time ignores the sample rate.** `LogParamSmooth::SetSmoothTime()` is never called, so the gain and sustain smoothers always use iPlug2's default coefficients, which are right for 48 kHz only (8 % too slow at 44.1 kHz, twice as fast at 96 kHz).~~ ✅ fixed in Phase 6 (legacy projects keep the old coefficients through the "Legacy timing" switch).
 - 🟡 Both envelopes are constructed with the name `"gain"` (`:182-183`), which makes debugging confusing.
-- 🟡 `MY_PRINTF` in `Trigger()` (`:249`) runs on the audio thread. Whenever a debugger is attached it calls `snprintf` and `OutputDebugStringA` (a syscall) on every note-on.
+- 🟡 `MY_PRINTF` in `Trigger()` (`:249`) runs on the audio thread. Whenever a debugger is attached it calls `snprintf` and `OutputDebugStringA` (a syscall) on every note-on. still open (compiled out unless a debugger is attached).
 
 ### 1.3 Oscillators
 
-- 🟠 **`VaiaOscillator` PWM edge cases** (`VaiaOscillator.h:39-46`): `pwm == 1.0` exactly isn't wrapped, so the output is DC high. The `while` loops step by 1 per iteration: with key-tracking (`pwm * f/440`) at high notes and `PWM Mod` up to ±2 this can be dozens of iterations per sample per unison voice. Use `pwm - std::floor(pwm)`. PWM wrapping also produces audible jumps from wide to narrow. Decide whether that's a feature (fold or clamp otherwise).
+- 🟠 **`VaiaOscillator` PWM edge cases** (`VaiaOscillator.h:39-46`): `pwm == 1.0` exactly isn't wrapped, so the output is DC high. The `while` loops step by 1 per iteration: with key-tracking (`pwm * f/440`) at high notes and `PWM Mod` up to ±2 this can be dozens of iterations per sample per unison voice. Use `pwm - std::floor(pwm)`. PWM wrapping also produces audible jumps from wide to narrow. Decide whether that's a feature (fold or clamp otherwise). Phase 6: the loops are gone (closed-form wrap with identical results). A width of exactly 100 % stays constant-high, because that is what 100 % means.
 - ~~🟡 `mPhase` is used unqualified inside a class template derived from a dependent base (`:34`). This only compiles with MSVC permissive. Use `this->mPhase`.~~ ✅ fixed in Phase 0
 - 🟡 `int temp = squareLookup[pos % 2];` then `return temp;`: a needless `double → int → T` round-trip.
 - 🟡 Output conventions differ: `VaiaOscillator` returns ±1, `SampleOscillator` returns 0/1.
@@ -135,8 +135,8 @@ Hot path: per sample × per voice (32) × per unison (up to 8).
 | # | Sev | Issue | Where | Suggestion |
 |---|---|---|---|---|
 | ~~P1~~ ✅ P4 | 🟠 | `pow(2.0, offsetCents/1200.0)` per unison voice per sample: up to 32 × 8 × fs `pow` calls per second (~12 M/s @ 48 k) | `DSP.h:340` | Precompute the detune ratios when unison or detune change, or once per block |
-| P2 | 🟠 | `440 * pow(2.0, …)` per voice per sample | `DSP.h:396` | Only the LFO and envelope terms change per sample. Use `exp2` on the summed exponent, or update per sub-block / control rate (e.g. every 16-32 samples) |
-| P3 | 🟠 | `VaiaOscillator::Process` calls `SetFreqCPS` (a divide) every sample, and its PWM `while` loops are unbounded | `VaiaOscillator.h:29-46` | Pass the increment, and use `floor` for wrapping |
+| P2 | 🟠 *(open: it would change the sound slightly)* | `440 * pow(2.0, …)` per voice per sample | `DSP.h:396` | Only the LFO and envelope terms change per sample. Use `exp2` on the summed exponent, or update per sub-block / control rate (e.g. every 16-32 samples) |
+| P3 | 🟠 *(PWM loops done in Phase 6, the rest open)* | `VaiaOscillator::Process` calls `SetFreqCPS` (a divide) every sample, and its PWM `while` loops are unbounded | `VaiaOscillator.h:29-46` | Pass the increment, and use `floor` for wrapping |
 | P4 | 🟠 | `rand()` in noise voices (CRT lock/TLS, not RT-safe) | `DSP.h:281-308` | Use the per-voice LCG (`Rand()`) |
 | ~~P5~~ ✅ P4 | 🟡 | `mInputs[kVoiceControlTimbre].Write(...)` per voice per block, never read | `DSP.h:370` | Remove |
 | ~~P6~~ ✅ P4 | 🟡 | The param smoother processes all 17 modulation lanes, including the 8 LFO lanes that are immediately overwritten | `DSP.h:507` | Smooth only the gain and sustain lanes |
@@ -169,10 +169,30 @@ Decisions (from review):
 | 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ✅ done |
 | 4 | Performance with bit-identical output: detune ratios once per block, `static_cast`, smoothing only the 9 smoothed lanes, no unused timbre write, trellis grid reuse (~35 % faster import). Added the render regression harness (`tests/render/`), which shows **identical output from `main` through Phase 4**. | no (verified by render hash) | ✅ done |
 | 5 | UI: meter, scope, 8 LFO displays, keyboard, pitch and mod wheel | no | ✅ done |
-| 6 🎧 | Sound: B4 sample rate, B8 tempo, B9 release (with migration), B10 DC blocker, noise fixes, PWM wrap, Pitch Keytrack, control-rate pitch | **yes** | waiting for the listening session |
+| 6 🎧 | Sound changes, one commit each: Dither/Input Protect removed (6.1), PWM wrap without loops (6.2), host tempo + sample rate + legacy switch + state v3 (6.3), smoothing follows the sample rate (6.4), audible release + migration (6.5), Pitch Keytrack + migration (6.6), DC blocker (6.7) | **yes** | ✅ done, waiting for the listening session |
 
-## 5. To discuss later
+## 5. Legacy projects and migration (Phase 6)
 
-- **A. FX-chain pipeline builder.** A minimal GUI for picking the import effects and quantizer, with their parameters, instead of the hard-coded drop lambda. The chain would be stored per sample (it already is, as a string: `mSamplePipelines`). Needs: an effect factory from that string, and a small list/editor control.
-- **B. Correct note release.** *(Groundwork in Phase 2: state v2 stores a `dspVersion` (currently 1), and `VaiaOneBitPlus::MigrateParams` is the hook. Phase 6 bumps it to 2 and resets the Release params when loading older states.)* Release stages are currently inaudible (B9). Once release works, existing projects would start sounding different, so state migration resets **all 8 Release params to 0** for states saved before the fix. The fix-era version is v2. "v1" is the current sample-block version, and unversioned or param-only states count as v1. Caveat: hosts that restore by parameter values instead of the state chunk (VST2 without chunks) can't be migrated.
-- Changing `PLUG_CHANNEL_IO` to `"0-2"` and replacing the template AAX/URL IDs: hygiene only, kept as-is for compatibility.
+Saved states carry a sound-behaviour version (`dspVersion`, see `src/StateFormat.h`). Everything saved by the original code (and by clean-up builds before Phase 6) counts as version 1.
+
+| What changed | Legacy project (loaded, version 1) | New instance |
+|---|---|---|
+| Release stages (B9) | the 8 Release values are reset to 0 on load, so the sound is identical | release works |
+| Pitch Keytrack | the 4 values are reset to 0 on load (the knob did nothing before) | works |
+| Tempo for synced LFOs (B8) | **"Legacy timing" switch on**: fixed 120 BPM | host tempo |
+| Sample playback speed (B4) | **"Legacy timing" switch on**: as if every sample was 44.1 kHz | the sample's own rate |
+| Smoothing time | **"Legacy timing" switch on**: the old (48 kHz) coefficients | follows the sample rate |
+| Dither / Input Protection | removed; the two parameter slots stay as hidden placeholders so the saved parameter run keeps its length | same |
+| DC blocker | applies to all projects (the audible part of the signal is unchanged) | on |
+
+The switch is saved with the project. A migrated project keeps sounding like before until the user turns the switch off, and what to do with an old project then is up to them. **Proof:** the render harness (`tests/render/`) shows that the new code in legacy mode with the DC blocker off reproduces the original code bit for bit (host tempo 140, transport stopping halfway, tempo-synced LFOs, sampler, unison, 48 and 44.1 kHz).
+
+**Limits:**
+- Hosts that restore the plugin from parameter values only (VST2 without state chunks, some preset systems) never hand over the state block, so those projects can't be recognised as legacy and get the new behaviour.
+- The 120 BPM bug mostly showed while the transport was stopped. While it runs, synced LFOs follow the host position and were already right; only the interpolation inside each block was slightly off.
+
+## 6. To discuss later
+
+- **A. FX-chain pipeline builder.** A minimal GUI for picking the import effects and quantizer, with their parameters, instead of the hard-coded drop lambda. The chain would be stored per sample (it already is, as a string: `Slot::pipeline`). Needs: an effect factory from that string, and a small list/editor control. `src/PipelinePresets.h` has the recipes tried so far. If dither is wanted, it is a pipeline effect (`DitherEffect`) there.
+- **B. Open sound items:** the sampler doesn't follow pitch bend or the pitch envelope; pitch is computed with `pow()` per sample (control-rate pitch would be faster but slightly different).
+- **C. Hygiene kept for compatibility:** `PLUG_CHANNEL_IO "0-2"`, the template AAX IDs and URL, and VST2 state chunks all change how hosts treat existing projects.
