@@ -476,9 +476,20 @@ public:
 
   void ProcessBlock(T** inputs, T** outputs, int nOutputs, int nFrames, double qnPos = 0., bool transportIsRunning = false, double tempo = 120.)
   {
+    const bool legacyTiming = mLegacyTiming.load(std::memory_order_relaxed);
+
     // Legacy projects: synced LFOs ran at a fixed 120 BPM (the plugin never passed the host tempo on)
-    if (mLegacyTiming.load(std::memory_order_relaxed))
+    if (legacyTiming)
       tempo = 120.;
+
+    // The parameter smoothers (gain, sustain levels) always used iPlug2's default coefficients (for 48 kHz), so
+    // they were right at 48 kHz only. Now they follow the sample rate, except in legacy mode. Updated here, on the
+    // audio thread, because the smoother is read here.
+    if (legacyTiming != mSmootherIsLegacy)
+    {
+      mParamSmoother.SetSmoothTime(kSmoothTimeMs, legacyTiming ? DEFAULT_SAMPLE_RATE : mSampleRate);
+      mSmootherIsLegacy = legacyTiming;
+    }
 
 
 
@@ -538,7 +549,9 @@ public:
   }
 
   void Reset(double sampleRate, int blockSize)
-  {
+  {    mSampleRate = sampleRate;
+    mSmootherIsLegacy = !mLegacyTiming.load(); // re-apply the smoothing time on the next block
+
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
     mSynth.Reset();
 
@@ -735,6 +748,10 @@ public:
     // Keep behaviours of projects saved before the sound changes (see StateFormat.h, ECompat). Written by the
     // UI / state thread, read by the audio thread.
     std::atomic<bool> mLegacyTiming{false};
+
+    static constexpr double kSmoothTimeMs = 5.; // LogParamSmooth's default
+    double mSampleRate = 44100.;
+    bool mSmootherIsLegacy = true; // the smoother starts with iPlug2's default coefficients (DEFAULT_SAMPLE_RATE)
 
     MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
     WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)

@@ -55,7 +55,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - 🟠 **Pitch Keytrack does nothing.** `pitchKeyTrackStrength` is stored (`:146, :241, :708`) but never read in `ProcessSamplesAccumulating`, so the four "Pitch Keytrack" knobs are dead.
 - 🟡 `midiNote = pitch * 12.0 + 69.1` (`:368`): the `+0.1` is a fudge factor to make the `< 1/2/3/4` comparisons robust. Use the voice's integer key (`mKey`) instead.
 - 🟡 `GetBusy()` returns `false` for the noise/sampler modes, but `mMode` is always set to `kSynth*` in `Trigger`, so the check is dead. The mode is chosen per sample from `midiNote`, not from `mMode`. Decide the voice type once in `Trigger` (the noise/sampler branch can be chosen from `mKey`).
-- 🟡 **Smoothing time ignores the sample rate.** `LogParamSmooth::SetSmoothTime()` is never called, so the gain and sustain smoothers always use the 44.1 kHz coefficients (they smooth faster at higher rates). This is a sound change, so it belongs in Phase 6 🎧.
+- ~~🟡 **Smoothing time ignores the sample rate.** `LogParamSmooth::SetSmoothTime()` is never called, so the gain and sustain smoothers always use iPlug2's default coefficients, which are right for 48 kHz only (8 % too slow at 44.1 kHz, twice as fast at 96 kHz).~~ ✅ fixed in Phase 6 (legacy projects keep the old coefficients through the "Legacy timing" switch).
 - 🟡 Both envelopes are constructed with the name `"gain"` (`:182-183`), which makes debugging confusing.
 - 🟡 `MY_PRINTF` in `Trigger()` (`:249`) runs on the audio thread. Whenever a debugger is attached it calls `snprintf` and `OutputDebugStringA` (a syscall) on every note-on.
 
