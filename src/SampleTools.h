@@ -1,6 +1,10 @@
 #pragma once
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 #include "src/IAudioEffect.h"
@@ -226,5 +230,47 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
   }
 
   return packedBytes;
+}
+// Turns a file path into a valid C++ identifier ("C:/x/808 Snare.wav" -> "s_808_Snare").
+inline std::string MakeCppIdentifier(const std::string& path)
+{
+  size_t lastSlash = path.find_last_of("/\\");
+  std::string name = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
+
+  size_t lastDot = name.find_last_of('.');
+  if (lastDot != std::string::npos)
+    name = name.substr(0, lastDot);
+
+  for (char& c : name)
+  {
+    if (!std::isalnum(static_cast<unsigned char>(c)))
+      c = '_';
+  }
+
+  if (name.empty())
+    return "kSample";
+  if (std::isdigit(static_cast<unsigned char>(name[0])))
+    name = "s_" + name;
+  return name;
+}
+
+// Builds a C++ array definition for SampleData.h from packed 1-bit data.
+// Bytes >= 0x80 are written as int8_t(0x..) so the array compiles without narrowing errors on every compiler.
+inline std::string ToCppArray(const std::string& path, const std::vector<int8_t>& packed1Bit)
+{
+  std::string code = "inline constexpr int8_t " + MakeCppIdentifier(path) + "[] = {";
+  for (size_t i = 0; i < packed1Bit.size(); ++i)
+  {
+    if (i % 16 == 0)
+      code += "\n  ";
+    char hexBuf[24];
+    const auto byte = static_cast<uint8_t>(packed1Bit[i]);
+    std::snprintf(hexBuf, sizeof(hexBuf), byte >= 0x80 ? "int8_t(0x%02X)" : "0x%02X", byte);
+    code += hexBuf;
+    if (i + 1 < packed1Bit.size())
+      code += ", ";
+  }
+  code += "\n};";
+  return code;
 }
 }; // namespace SampleTools

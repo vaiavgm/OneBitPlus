@@ -34,8 +34,9 @@ public:
   int UnserializeState(const IByteChunk& chunk, int startPos) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline(), bool printBits = false);
   int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = CreateDefaultPipeline());
+  // Builds a C++ array definition of the packed sample (for SampleData.h) and writes it to the debugger output.
   std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
 
   void ReloadSamples(uint32_t targetSampleRate);
@@ -45,7 +46,10 @@ public:
   ISender<1> mOscilloscopeVisSender;
   DragDropWaveformDisplay* mDropBox = nullptr;
 
-  char* kMyString = "Hello, World!";
+  // MIDI note that triggers the sampler (notes 0-2 are noise, see Voice::ProcessSamplesAccumulating)
+  static constexpr int kSamplerNote = 3;
+  // velocity used by the drop box to audition the most recently dropped sample (0 = nothing to audition)
+  int mPreviewVelocity = 0;
   // Keep file paths of imported samples for GUI display and persistence
   std::vector<std::string> mSamplePaths;
   // Persist the pipeline string used to process each sample

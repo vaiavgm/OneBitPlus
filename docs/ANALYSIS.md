@@ -11,13 +11,13 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 
 | # | Sev | Issue | Where |
 |---|-----|-------|-------|
-| B1 | 🔴 | `ImportSampleAndPrintBits` never returns a value, so the caller gets an undefined value (UB) | `VaiaOneBitPlus.cpp:956-980` |
+| ~~B1~~ ✅ | 🔴 | `ImportSampleAndPrintBits` never returns a value, so the caller gets an undefined value (UB) | `VaiaOneBitPlus.cpp:956-980` |
 | B2 | 🔴 | User samples are wiped on the first `OnReset` and on every sample-rate change, including samples just restored from a saved state | `VaiaOneBitPlus.cpp:870-882`, `:1038-1045` |
 | B3 | 🔴 | Data race / use-after-free: the UI thread adds or clears samples while the audio thread is reading them | `SampleData.h:96-139`, `VaiaOneBitPlus_DSP.h:253-254` |
 | B4 | 🔴 | The sample rate is dropped at `BindSample`, so samples play at 44.1 kHz pitch no matter what rate they were rendered at | `VaiaOneBitPlus_DSP.h:254` |
-| B5 | 🔴 | A dangling pointer is kept from the `.c_str()` of a temporary string | `VaiaOneBitPlus.cpp:678` |
-| B6 | 🟠 | Velocity→sample mapping is 1:1 (sample *n* only plays at velocity *n*). This contradicts the README, and the click-preview (vel 127) plays silence | `SampleData.h:115-139`, `VaiaOneBitPlus.cpp:683-694` |
-| B7 | 🟠 | The click-preview sends MIDI **out to the host** (`SendMidiMsg`) instead of to the plugin's own DSP | `VaiaOneBitPlus.cpp:683-694` |
+| ~~B5~~ ✅ | 🔴 | A dangling pointer is kept from the `.c_str()` of a temporary string | `VaiaOneBitPlus.cpp:678` |
+| ~~B6~~ ✅ | 🟠 | *Phase 1: mapping kept on purpose, README corrected, preview fixed.* Velocity→sample mapping is 1:1 (sample *n* only plays at velocity *n*). This contradicts the README, and the click-preview (vel 127) plays silence | `SampleData.h:115-139`, `VaiaOneBitPlus.cpp:683-694` |
+| ~~B7~~ ✅ | 🟠 | The click-preview sends MIDI **out to the host** (`SendMidiMsg`) instead of to the plugin's own DSP | `VaiaOneBitPlus.cpp:683-694` |
 | B8 | 🟠 | Tempo is never passed to the DSP, so tempo-synced LFOs always run at 120 BPM | `VaiaOneBitPlus.cpp:865` |
 | B9 | 🟠 | Release stages are inaudible: the gate drops to 0 on note-off and the voice is muted at once | `VaiaOneBitPlus_DSP.h:366, 413-435` |
 | B10 | 🟠 | Output is unipolar (0 / +gain), which puts a large DC offset on the output and wastes half the headroom | `VaiaOneBitPlus_DSP.h:533-555` |
@@ -28,16 +28,16 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 
 ### 1.1 Plugin / state (`VaiaOneBitPlus.cpp`, `VaiaOneBitPlus.h`)
 
-- 🔴 **B1: missing return.** `int ImportSampleAndPrintBits(...)` falls off its end (`:980`). The drop callback then uses that undefined index (`:675-677`). Fix: `return sampleIdx;`. Also, `ImportSample` and `ImportSampleAndPrintBits` are ~90 % duplicated. Make one call the other.
+- ~~🔴 **B1: missing return.** `int ImportSampleAndPrintBits(...)` falls off its end (`:980`). The drop callback then uses that undefined index (`:675-677`). Fix: `return sampleIdx;`. Also, `ImportSample` and `ImportSampleAndPrintBits` are ~90 % duplicated. Make one call the other.~~ ✅ fixed in Phase 1 (`ImportSample(..., printBits)`; `ImportSampleAndPrintBits` is now a thin wrapper)
 - 🔴 **B2: samples wiped on reset.** `mLastLoadedSampleRate` starts at `0`, so the very first `OnReset()` always calls `ReloadSamples()`. That function calls `ClearDynamicSamples()` and clears `mSamplePaths`/`mSamplePipelines`, and then imports nothing (every import is commented out, `:1112-1148`). Hosts usually call `setState` before or around activation, so samples restored by `UnserializeState` are lost. Any later sample-rate change also throws away every user-dropped sample. Fix: keep the source PCM (or the file paths plus pipeline) and **re-render** on a rate change instead of clearing.
-- 🔴 **B5: dangling pointer.** `kMyString = const_cast<char*>(PrintBits(...).c_str());` (`:678`) stores a pointer into a temporary that is destroyed at the end of the statement. In addition, `char* kMyString = "Hello, World!";` (`VaiaOneBitPlus.h:214`) is ill-formed in C++11+ (it only compiles under MSVC permissive mode). The member is otherwise unused, so remove it.
-- 🟠 **B7: preview MIDI goes the wrong way.** `SendMidiMsg()` from the UI lambda (`:683-694`) is the DSP→host MIDI-out path. It also isn't safe to call from the UI thread. Use `SendMidiMsgFromUI()` to reach `ProcessMidiMsg`.
+- ~~🔴 **B5: dangling pointer.** `kMyString = const_cast<char*>(PrintBits(...).c_str());` (`:678`) stores a pointer into a temporary that is destroyed at the end of the statement. In addition, `char* kMyString = "Hello, World!";` (`VaiaOneBitPlus.h:214`) is ill-formed in C++11+ (it only compiles under MSVC permissive mode). The member is otherwise unused, so remove it.~~ ✅ fixed in Phase 1
+- ~~🟠 **B7: preview MIDI goes the wrong way.** `SendMidiMsg()` from the UI lambda (`:683-694`) is the DSP→host MIDI-out path. It also isn't safe to call from the UI thread. Use `SendMidiMsgFromUI()` to reach `ProcessMidiMsg`.~~ ✅ fixed in Phase 1 (`SendMidiMsgFromUI`, plays the last dropped sample at its own velocity)
 - 🟠 **B8: tempo not forwarded.** `mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning)` (`:865`) leaves out `mTimeInfo.mTempo`, so the default `120.` is always used.
 - 🟠 **VST2 never saves custom state.** `PLUG_DOES_STATE_CHUNKS 0` (`config.h:24`) means the VST2 wrapper doesn't set `effFlagsProgramChunks`, so `SerializeState` (samples, paths) is never called there. Set it to `1` if VST2 matters. VST3/AU call `SerializeState` regardless.
 - 🟠 **`UnserializeState` trusts its input.** `dataSize`/`numSlots`/`pathCount` (`:817-850`) are used without bounds checks, and `chunk.Get*` failures (return value < 0) are ignored. A corrupt or truncated chunk can trigger huge allocations or read garbage. It also clears samples on whatever thread the host uses for state (see B3).
-- 🟡 `PrintBits` output goes through `MY_PRINTF`, whose buffer is 512 bytes (`Debug.h`). The generated C array is **truncated** for any sample over ~80 bytes, which makes the "print bits" workflow unusable. It is also computed twice per drop (`:675` internally and again at `:678`). Write the array to a file, or loop `OutputDebugStringA` over chunks.
+- ~~🟡 `PrintBits` output goes through `MY_PRINTF`, whose buffer is 512 bytes (`Debug.h`). The generated C array is **truncated** for any sample over ~80 bytes, which makes the "print bits" workflow unusable. It is also computed twice per drop (`:675` internally and again at `:678`). Write the array to a file, or loop `OutputDebugStringA` over chunks.~~ ✅ fixed in Phase 1 (`SampleTools::ToCppArray` + `DebugPrintLong`; bytes ≥ 0x80 are emitted as `int8_t(0x..)` so they compile without narrowing errors)
 - 🟡 `mSamplePathsBuffer` is never sized, so `UpdateSampleListBuffer()` always returns early. The sample list UI is dead code (it is commented out at `:635-653`, `:736-741`, `:810-815`).
-- 🟡 The comment in `UpdateSampleListBuffer` (`:715`) documents the 1:1 velocity mapping (B6). The README says the opposite.
+- ~~🟡 The comment in `UpdateSampleListBuffer` (`:715`) documents the 1:1 velocity mapping (B6). The README says the opposite.~~ ✅ resolved in Phase 1: the 1:1 mapping is kept on purpose and the README now documents it
 - 🟡 LFO-sync visibility is only updated in `SetAnimationEndActionFunction` (`:279-283` etc.). After loading a preset or state with `Sync = off`, the wrong rate knob (Hz vs tempo) stays visible.
 
 ### 1.2 DSP / voice (`VaiaOneBitPlus_DSP.h`)
@@ -70,6 +70,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 - 🟠 **WAVE_FORMAT_EXTENSIBLE (0xFFFE) is rejected** (`SampleLoader.h:195`). Many 24-bit and multichannel WAVs from DAWs use it, so the import fails silently. Read the sub-format GUID.
 - 🟠 **More than 2 channels are not handled**: they are treated as mono, interleaved (`:194`). The result plays N× too long and is garbage.
 - 🟠 **Truncated or streaming WAVs** (data chunk size larger than the file, or `0xFFFFFFFF`) hit the `break` at `:168` before `data` is found, so they are rejected. The clamp at `:200` is then unreachable for the `data` chunk.
+- ~~🔴 **32-bit float WAV: full scale flips sign.** `f * 2147483647.0f` rounds to 2^31 in float, which overflows `int32` (UB, in practice `INT32_MIN`), so every full-scale positive peak was imported as full-scale negative.~~ ✅ found by the Phase 0 tests, fixed in Phase 1 (scale in double)
 - 🟠 **No user feedback on failure.** Errors go to `std::cerr`, which is invisible in a plugin.
 - 🟡 `SampleTools::Normalize` takes `std::abs(INT32_MIN)`, which is UB. `SampleTools::Saturate` converts `tanh(..)*2^31` to `int32`, which overflows. Both functions, and `SampleTools::LowPassFilter`, are **unused** duplicates of the `IAudioEffect` classes. Delete them.
 - 🟡 `BiquadFilterEffect` cascades identical Q = 0.707 sections (`IAudioEffect.h:303`). That is not a Butterworth response for order > 2 (it is −6 dB at fc for order 4, etc.). Use the per-stage Butterworth Q values.
@@ -91,8 +92,8 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 
 ### 1.6 Compression analyzer (`BitCompression.h`, `CompressionAnalyzer/`)
 
-- 🟠 `for (size_t i = 0; i <= totalBits - L; i += L)` (`BitCompression.h:109, :275`) underflows when `totalBits < L`, which loops out of bounds.
-- 🟠 `k_bits = (K==4)?2:((K==8)?3:4)` (`:337`) is wrong for K = 32/64: indices ≥ 16 don't fit into 4 bits. The reported r32/r64 compression rates are therefore **too optimistic**, and the analyzer's graphs are misleading. Use `ceil(log2(K))`.
+- ~~🟠 `for (size_t i = 0; i <= totalBits - L; i += L)` (`BitCompression.h:109, :275`) underflows when `totalBits < L`, which loops out of bounds.~~ ✅ fixed in Phase 1
+- ~~🟠 `k_bits = (K==4)?2:((K==8)?3:4)` (`:337`) is wrong for K = 32/64: indices ≥ 16 don't fit into 4 bits. The reported r32/r64 compression rates are therefore **too optimistic**, and the analyzer's graphs are misleading. Use `ceil(log2(K))`.~~ ✅ fixed in Phase 1 (`ceil(log2(K))`; analyzer graphs for K ≥ 32 will now show higher, correct rates)
 - 🟡 There is no decoder, so the round trip is never verified. `MaskHash` is unused. The dictionary is padded with duplicate `0` entries.
 - 🟡 The analyzer is Win32-only (`<windows.h>`, GDI). That's fine for a dev tool, but it is worth noting in its docs.
 
@@ -122,7 +123,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 | Config | `PLUG_CHANNEL_IO "2-2"` on an instrument (`PLUG_TYPE 1`). It should be `"0-2"`: the inputs are never used, and hosts may treat it as an effect. |
 | Portability | ✅ *Phase 0: `Debug.h` is guarded with `_WIN32`, `<windows.h>`/`<format>` are gone from `VaiaOscillator.h`, `this->`-qualified members are used, the enums moved to `src/Params.h` (which removes the circular include), unused narrowing `int8_t` arrays were removed, and the sources pass a clang syntax check. Remaining: the macOS/iOS project files still don't list the `src/` headers, and the Debug/Release C++ standard mismatch.* Originally: effectively **Windows/MSVC only**. `Debug.h` declares `__declspec(dllimport)` Win32 functions unconditionally. `VaiaOscillator.h` includes `<windows.h>` and `<format>`. Code relies on MSVC permissive mode (`char*` from a literal, unqualified dependent-base members, `EParams` used in `VaiaOneBitPlus_DSP.h` before it is declared because of the circular include with `VaiaOneBitPlus.h`). The macOS/iOS/web project files exist but almost certainly don't build, and the macOS Xcode project doesn't list most `src/` headers. VST3 Debug is `stdcpp17` while Release is `stdcpp20` (`<format>` needs C++20). |
 | Tests | ~~No tests at all.~~ ✅ Phase 0 added `tests/` (loader, resampler, packing, quantizers, effects, velocity mapping, `BitCompression`). |
-| Docs | The README describes behaviour that doesn't match the code (sample velocity distribution). The manual (`manual/*.tex`) is not checked against the parameters. |
+| Docs | ~~The README describes behaviour that doesn't match the code (sample velocity distribution).~~ ✅ Phase 1. The manual (`manual/*.tex`) is not checked against the parameters. |
 
 ---
 
@@ -162,7 +163,7 @@ Decisions (from review):
 | Phase | Content | Sound change? | Status |
 |---|---|---|---|
 | 0 | Safety net: unit tests, includes and portability, clang syntax check | no | ✅ done |
-| 1 | Quick correctness fixes (B1, B5, B7, loader float overflow, BitCompression, PrintBits, README) | no | ⏳ |
+| 1 | Quick correctness fixes (B1, B5, B7, loader float overflow, BitCompression, PrintBits, README) | no (new imports of full-scale float WAVs are now correct) | ✅ done |
 | 2 | Sample lifecycle: immutable sample bank (B3), re-render on rate change instead of clearing (B2), state v2 + migration layer, validation, background import, VST2 state chunks | no (keeps samples that used to be lost) | ⏳ |
 | 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ⏳ |
 | 4 | Performance that gives identical output (cached detune ratios, `static_cast`, trellis buffer reuse, no timbre write, no copies) | no | ⏳ |

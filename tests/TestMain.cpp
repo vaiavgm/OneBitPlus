@@ -142,6 +142,24 @@ TEST(Loader_FloatStereoToMono)
   std::remove(path.c_str());
 }
 
+TEST(Loader_FloatFullScaleDoesNotOverflow)
+{
+  std::vector<uint8_t> d;
+  for (float f : {1.0f, -1.0f, 2.0f})
+  {
+    uint32_t u;
+    std::memcpy(&u, &f, 4);
+    PutU32(d, u);
+  }
+  auto path = WriteWav("t_f32full.wav", 3, 1, 44100, 32, d);
+  LoadedSample s = SampleLoader().load_file_static(path.c_str());
+  CHECK(s.sampleBuffer.size() == 3);
+  CHECK(s.sampleBuffer[0] == 2147483647);  // was INT32_MIN (sign flip) before the fix
+  CHECK(s.sampleBuffer[1] == -2147483647);
+  CHECK(s.sampleBuffer[2] == 2147483647);  // clipped
+  std::remove(path.c_str());
+}
+
 TEST(Loader_RejectsNonWav)
 {
   LoadedSample s = SampleLoader().load_file_static("does_not_exist.txt");
@@ -258,6 +276,38 @@ TEST(BitCompression_ConstantStreamCompresses)
   std::vector<bool> bits(4096, false);
   double rate = BitStreamAnalyzer::evaluateMetrics(bits, 16, 4, false);
   CHECK(rate < 25.0);
+}
+
+TEST(BitCompression_ShortInputDoesNotUnderflow)
+{
+  std::vector<bool> bits(5, true);
+  CHECK(BitStreamAnalyzer::evaluateMetrics(bits, 16, 4, false) == 100.0);
+  CHECK(BitStreamAnalyzer::evaluateMetricsEliasGamma(bits, 16, 4, false) == 100.0);
+  CHECK(BitStreamAnalyzer::evaluateMetrics({}, 8, 4, false) == 100.0);
+}
+
+TEST(BitCompression_IndexBitsScaleWithK)
+{
+  // 64 distinct 8-bit chunks, each once: every chunk is a dictionary hit with K = 64,
+  // so payload = 64 * (1 + 6) bits and header = 64 * 8 bits.
+  std::vector<bool> bits;
+  for (int v = 0; v < 64; ++v)
+    for (int b = 7; b >= 0; --b)
+      bits.push_back((v >> b) & 1);
+  const double rate = BitStreamAnalyzer::evaluateMetrics(bits, 8, 64, false);
+  CHECK_NEAR(rate, 100.0 * (64 * 8 + 64 * 7) / 512.0, 1e-9);
+}
+
+// ---------------------------------------------------------------- C++ array export
+TEST(ToCppArray_IdentifierAndFormat)
+{
+  CHECK(SampleTools::MakeCppIdentifier("C:\\x\\808 Snare-1.wav") == "s_808_Snare_1");
+  CHECK(SampleTools::MakeCppIdentifier("/a/b/kick.WAV") == "kick");
+  CHECK(SampleTools::MakeCppIdentifier("") == "kSample");
+  const std::string code = SampleTools::ToCppArray("kick.wav", {0x01, static_cast<int8_t>(0xFF)});
+  CHECK(code == "inline constexpr int8_t kick[] = {\n  0x01, int8_t(0xFF)\n};");
+  // long arrays are not truncated (MY_PRINTF used to cut at 512 bytes)
+  CHECK(SampleTools::ToCppArray("x", std::vector<int8_t>(1000, 0)).size() > 6000);
 }
 
 int main()

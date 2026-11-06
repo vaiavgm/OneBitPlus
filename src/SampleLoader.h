@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <string>
 #include <string_view>
 #include <fstream>
 #include <iterator>
@@ -209,9 +210,9 @@ inline auto SampleLoader::load_file_static(const char* path) const -> LoadedSamp
     for (size_t i = 0; i < numSamples; ++i) {
       float f;
       std::memcpy(&f, &fileBuffer[dataOffset + i * 4], sizeof(float));
-      if (f > 1.0f) f = 1.0f;
-      if (f < -1.0f) f = -1.0f;
-      sampleBuffer.push_back(static_cast<int32_t>(f * 2147483647.0f));
+      // scale in double: 1.0f * 2147483647.0f rounds to 2^31 in float, which overflows int32
+      const double d = std::clamp(static_cast<double>(f), -1.0, 1.0);
+      sampleBuffer.push_back(static_cast<int32_t>(d * 2147483647.0));
     }
   } else {
     load_samples(fileBuffer, sampleBuffer, header, dataOffset, dataSize);

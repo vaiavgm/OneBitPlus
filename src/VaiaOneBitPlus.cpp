@@ -672,25 +672,31 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         p1.effects.push_back(std::make_shared<DitherEffect>(0.1));
         p1.quantizer = std::make_shared<TrellisQuantizer>();
 
-        int sampleIndex = ImportSampleAndPrintBits(filePath, targetSampleRate, resampleAlgo, p1);
-        std::vector<int8_t> sampleData = mDSP.mSampleManager.GetDynamicSampleData(sampleIndex);
-        mDropBox->SetWaveformData(sampleData);
-        kMyString = const_cast<char*>(PrintBits(filePath, sampleData).c_str());
-        
+        const int sampleIndex = ImportSample(filePath, targetSampleRate, resampleAlgo, p1, /*printBits*/ true);
+        if (sampleIndex < 0)
+          return;
+
+        mDropBox->SetWaveformData(mDSP.mSampleManager.GetDynamicSampleData(sampleIndex));
+        // dynamic slot i is played by velocity kPreparedCount + 1 + i (1:1 mapping, see SampleManager)
+        mPreviewVelocity = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + sampleIndex;
       },
 
-      // --- 2. MOUSE DOWN (Note On) ---
+      // --- 2. MOUSE DOWN (Note On): audition the last dropped sample ---
       [this]() {
+        if (mPreviewVelocity <= 0)
+          return;
         IMidiMsg msg;
-        msg.MakeNoteOnMsg(3, 127, 0);
-        SendMidiMsg(msg);
+        msg.MakeNoteOnMsg(kSamplerNote, mPreviewVelocity, 0);
+        SendMidiMsgFromUI(msg); // UI -> DSP (SendMidiMsg would go to the host's MIDI out)
       },
 
       // --- 3. MOUSE UP (Note Off) ---
       [this]() {
+        if (mPreviewVelocity <= 0)
+          return;
         IMidiMsg msg;
-        msg.MakeNoteOffMsg(3, 0, 0);
-        SendMidiMsg(msg);
+        msg.MakeNoteOffMsg(kSamplerNote, 0, 0);
+        SendMidiMsgFromUI(msg);
       });
 
     pGraphics->AttachControl(mDropBox);
@@ -926,7 +932,7 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
 }
 
 
-int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
+int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline, bool printBits)
 {
   if (!filePath)
     return -1;
@@ -949,88 +955,21 @@ int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate
     UpdateSampleListBuffer();
   }
 
+  if (printBits)
+    PrintBits(filePath, packed1Bit);
+
   return idx;
 }
 
-
 int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
 {
-  if (!filePath)
-    return -1;
-
-  SampleLoader loader;
-  LoadedSample rawWav = loader.load_file_static(filePath);
-  if (rawWav.sampleBuffer.empty())
-    return -1;
-
-  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
-
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
-
-  int sampleIdx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
-  if (sampleIdx >= 0)
-  {
-    mSamplePaths.emplace_back(filePath);
-    mSamplePipelines.emplace_back(pipeline.ToString());
-    UpdateSampleListBuffer();
-  }
-
-  PrintBits(filePath, packed1Bit);
-
+  return ImportSample(filePath, targetSampleRate, resampleAlgo, pipeline, /*printBits*/ true);
 }
-
-
-
 
 std::string VaiaOneBitPlus::PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit)
 {
-  // --- Generate C++ array definition ---
-  std::string path(filePath);
-  size_t lastSlash = path.find_last_of("/\\");
-  std::string varName = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
-
-  // Remove extension (everything from the last dot onwards)
-  size_t lastDot = varName.find_last_of('.');
-  if (lastDot != std::string::npos)
-  {
-    varName = varName.substr(0, lastDot);
-  }
-
-  // Sanitize non-alphanumeric characters (e.g., spaces, hyphens) into underscores
-  for (char& c : varName)
-  {
-    if (!std::isalnum(static_cast<unsigned char>(c)))
-    {
-      c = '_';
-    }
-  }
-
-  // C++ variable names cannot start with a digit (e.g. "808Snare" -> "s_808Snare")
-  if (!varName.empty() && std::isdigit(static_cast<unsigned char>(varName[0])))
-  {
-    varName = "s_" + varName;
-  }
-  else if (varName.empty())
-  {
-    varName = "kSample";
-  }
-
-  // Build the array code string
-  std::string code = "inline constexpr int8_t " + varName + "[] = {";
-  for (size_t i = 0; i < packed1Bit.size(); ++i)
-  {
-    char hexBuf[16];
-    // Cast to uint8_t prevents sign-extension printing issues
-    std::snprintf(hexBuf, sizeof(hexBuf), "0x%02X", static_cast<uint8_t>(packed1Bit[i]));
-    code += hexBuf;
-    if (i + 1 < packed1Bit.size())
-    {
-      code += ", ";
-    }
-  }
-  code += "};";
-
-  MY_PRINTF("%s\n", code.c_str());
+  std::string code = SampleTools::ToCppArray(filePath ? filePath : "", packed1Bit);
+  DebugPrintLong(code);
   return code;
 }
 
