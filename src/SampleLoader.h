@@ -49,7 +49,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
     case 8:
       for (int i = 0; i < numSamples; ++i) {
         int32_t sampleVal = static_cast<int32_t>(fileBuffer[dataOffset + i]) - 128;
-        sampleBuffer.push_back(sampleVal << 24); // Scale to 32-bit
+        sampleBuffer.push_back(sampleVal * 16777216); // Scale to 32-bit (multiply: left-shifting negatives is UB before C++20)
       }
       break;
 
@@ -57,7 +57,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
       for (int i = 0; i < numSamples; ++i) {
         int16_t val;
         std::memcpy(&val, &fileBuffer[dataOffset + i * bytesPerSample], sizeof(int16_t));
-        sampleBuffer.push_back(static_cast<int32_t>(val) << 16); // Scale to 32-bit
+        sampleBuffer.push_back(static_cast<int32_t>(val) * 65536); // Scale to 32-bit (multiply: left-shifting negatives is UB before C++20)
       }
       break;
 
@@ -70,7 +70,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
         if (sampleVal & 0x800000) {
           sampleVal |= 0xFF000000; 
         }
-        sampleBuffer.push_back(sampleVal << 8); // Scale to 32-bit
+        sampleBuffer.push_back(static_cast<int32_t>(static_cast<uint32_t>(sampleVal) << 8)); // Scale to 32-bit (shift unsigned, no UB)
       }
       break;
 

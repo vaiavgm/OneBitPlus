@@ -137,6 +137,8 @@ public:
 
     // sample osc
     SampleOscillator<T> mSampleOsc{};
+    // generation of the SampleManager bank mSampleOsc points into (0 = static data)
+    uint64_t mBankGeneration = 0;
 
     // lightweight debug counter to rate-limit logging inside the voice
     int mDebugSampleCounter = 0;
@@ -254,6 +256,7 @@ public:
       mSampleOsc.Reset();
       auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
       mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);
+      mBankGeneration = sampleInfo.bankGeneration; // keeps the sample bank alive while this voice plays
 
       if (isRetrigger)
       {
@@ -526,6 +529,7 @@ public:
     // CentralizeLFO(mModulations.GetList()[kModPwmLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
 
     mSynth.ProcessBlock(mModulations.GetList(), outputs, 2, nOutputs, nFrames);
+    ReportSampleBankUsage();
 
     double eps = 0.001;
 
@@ -556,6 +560,20 @@ public:
     default:
       break;
     }
+  }
+
+  // Tell the SampleManager which sample banks voices still read from, so replaced banks can be freed
+  // (off the audio thread). Lock-free: only atomic loads/stores and a loop over the voices.
+  void ReportSampleBankUsage()
+  {
+    uint64_t oldest = mSampleManager.CurrentGeneration();
+    for (int v = 0; v < static_cast<int>(mSynth.NVoices()); ++v)
+    {
+      const auto* pVoice = static_cast<const Voice*>(mSynth.GetVoice(v));
+      if (pVoice->mBankGeneration != 0 && pVoice->GetBusy())
+        oldest = std::min(oldest, pVoice->mBankGeneration);
+    }
+    mSampleManager.ReportOldestGenerationInUse(oldest);
   }
 
   void Reset(double sampleRate, int blockSize)

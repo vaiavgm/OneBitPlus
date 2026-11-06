@@ -12,7 +12,10 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | `VaiaOneBitPlus_DSP.h` | `OneBitPlusDSP<T>`: the voice class, the `MidiSynth` with 32 voices, 8 LFOs, param smoothers, the output stage, `SetParam` routing. |
 | `VaiaOscillator.h` | Pulse/PWM oscillator (`IOscillator<T>`), ±1 output. |
 | `SampleOscillator.h` | Plays packed 1-bit sample data (MSB first), 0/1 output. |
-| `SampleData.h` | `SampleManager`: velocity-indexed sample slots (static prepared samples plus up to 127 dynamic ones). |
+| `SampleData.h` | `SampleManager`: velocity-indexed sample slots (static prepared samples plus up to 127 dynamic ones) in immutable, atomically swapped banks. |
+| `StateFormat.h` | Versioned read/write of the custom state block (v0/v1/v2, `dspVersion`). |
+| `SampleImportWorker.h` | Background thread for sample imports. |
+| `PipelinePresets.h` | Named import pipelines (effects + quantizer). |
 | `SampleLoader.h` | Minimal RIFF/WAV parser → mono `int32` PCM. |
 | `SampleTools.h` | Resampling (nearest/linear/Lanczos-3), `ReduceToOneBit` (pipeline → bits → packed bytes). |
 | `IAudioEffect.h` | Offline pre-processing effects (Gain, Trim, Normalize, LP/HP, Biquad, Saturate, Clip, SR-reduce, Dither) and `AudioPipeline`. |
@@ -52,13 +55,23 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 - Dynamic sample slot `i` ↔ MIDI velocity `kPreparedCount + 1 + i` (see `SampleManager::GetSampleForVelocity`).
 - Notes 0-3 are special (noise ×3, sampler). Everything else is the synth.
 
-## Threading (as-is)
+## Threading
 
-- Audio thread: `ProcessBlock`, `ProcessMidiMsg`, `Voice::*`.
-- UI thread: `mLayoutFunc`, the drop callback → `ImportSample*` → `SampleManager::AddSample`.
-- Host-dependent: `OnParamChange` → `mDSP.SetParam`, `OnReset`, `Serialize/UnserializeState`.
-- **There is no synchronization** between the UI-side sample bank mutation and the audio-side reads. See [ANALYSIS.md](ANALYSIS.md) B3.
+- **Audio thread**: `ProcessBlock`, `ProcessMidiMsg`, `Voice::*`. It reads samples lock-free through `SampleManager::GetSampleForVelocity`, and calls `OneBitPlusDSP::ReportSampleBankUsage()` once per block.
+- **UI/main thread**: `mLayoutFunc`, the drop callback (it only queues a job), and `OnIdle` (collects import results, refreshes the drop box, frees retired sample banks).
+- **Import worker thread** (`SampleImportWorker`): load → resample → pipeline → 1-bit → `SampleManager::AddSample`.
+- **Host-dependent**: `OnParamChange` → `mDSP.SetParam`, `OnReset`, `Serialize/UnserializeState`. Sample edits from here are safe too.
+
+### Sample banks
+
+`SampleManager` never modifies a bank that is published. An edit copies the slot list (cheap: the slots are `shared_ptr`s), publishes the new bank with an atomic pointer store and a higher generation, and retires the old one. Each voice remembers the generation it bound in `Trigger()`. After every block, the audio thread stores the oldest generation still used by a busy voice. Retired banks older than that are freed by the next edit, or by `OnIdle`. The audio thread never allocates, frees or locks.
 
 ## State format (`SerializeState`)
 
-`[params][u32 version=1][u32 numSlots]{u32 sr, u32 size, bytes}×numSlots[u32 pathCount]{str path, str pipeline}×pathCount`
+`[params][custom block]`. The custom block is versioned, see `src/StateFormat.h`:
+
+- **v0**: no block (params only).
+- **v1**: `u32 1, u32 n, n×{u32 sr, u32 size, bytes}, u32 m, m×{str path, str pipeline}`. Read-only.
+- **v2** (written now): `u32 2, u32 dspVersion, u32 n, n×{u32 sr, u32 size, bytes, str path, str pipeline}`.
+
+`dspVersion` is the sound-behaviour version the state was saved with. When it is older than `OneBitState::kLatestDspVersion`, `VaiaOneBitPlus::MigrateParams` adjusts parameters so that old projects keep their sound.

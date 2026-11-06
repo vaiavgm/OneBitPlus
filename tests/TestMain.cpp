@@ -6,7 +6,9 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <chrono>
 #include <functional>
+#include <thread>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -14,6 +16,9 @@
 #include "src/BitCompression.h"
 #include "src/IAudioEffect.h"
 #include "src/SampleData.h"
+#include "src/SampleImportWorker.h"
+#include "src/StateFormat.h"
+#include "src/PipelinePresets.h"
 #include "src/SampleLoader.h"
 #include "src/SampleTools.h"
 
@@ -268,6 +273,247 @@ TEST(SampleManager_VelocityMapsOneToOne)
   CHECK(s3.size == 1 && s3.data[0] == 0);
   m.ClearDynamicSamples();
   CHECK(m.DynamicCount() == 0);
+}
+
+TEST(SampleManager_SlotMetadataAndLimit)
+{
+  SampleData::SampleManager m;
+  const int8_t a[] = {1};
+  CHECK(m.AddSample(a, 1, 48000, "kick.wav", "Normalize->Trellis") == 0);
+  auto slots = m.CopyDynamicSlots();
+  CHECK(slots.size() == 1 && slots[0].path == "kick.wav" && slots[0].pipeline == "Normalize->Trellis" && slots[0].sampleRate == 48000);
+  for (size_t i = 1; i < SampleData::SampleManager::kMaxDynamicSlots; ++i)
+    CHECK(m.AddSample(a, 1) >= 0);
+  CHECK(m.AddSample(a, 1) == -1); // velocities 1..127 are all taken
+  CHECK(m.GetSampleForVelocity(1.0).size == 1); // velocity 127 -> last slot
+}
+
+TEST(SampleManager_BankKeptWhileInUse)
+{
+  SampleData::SampleManager m;
+  const int8_t a[] = {42, 43};
+  m.AddSample(a, 2);
+
+  // "audio thread": a voice binds the sample at velocity 1 and keeps the raw pointer
+  SampleData::SampleInfo playing = m.GetSampleForVelocity(1.0 / 127.0);
+  CHECK(playing.bankGeneration == m.CurrentGeneration());
+  m.ReportOldestGenerationInUse(playing.bankGeneration);
+
+  // "UI thread": samples are replaced while the voice still plays
+  m.ClearDynamicSamples();
+  m.ReplaceDynamicSamples({});
+  CHECK(m.RetiredBankCount() >= 1);         // the bank the voice uses is not freed...
+  CHECK(playing.data[0] == 42 && playing.data[1] == 43); // ...so its data is still valid
+
+  // the voice stops: audio thread reports only the current bank in use -> old banks are freed
+  m.ReportOldestGenerationInUse(m.CurrentGeneration());
+  m.CollectGarbage();
+  CHECK(m.RetiredBankCount() == 0);
+  CHECK(m.GetSampleForVelocity(1.0 / 127.0).data == SampleData::kSilence);
+}
+
+TEST(SampleManager_ConcurrentEditsAndReads)
+{
+  SampleData::SampleManager m;
+  std::atomic<bool> stop{false};
+  std::atomic<long> reads{0};
+  std::thread audio([&] {
+    while (!stop.load())
+    {
+      auto info = m.GetSampleForVelocity(1.0 / 127.0);
+      volatile int8_t v = info.data ? info.data[0] : 0;
+      (void)v;
+      m.ReportOldestGenerationInUse(info.bankGeneration ? info.bankGeneration : m.CurrentGeneration());
+      ++reads;
+    }
+  });
+  const int8_t a[] = {7};
+  for (int i = 0; i < 2000; ++i)
+  {
+    m.ClearDynamicSamples();
+    m.AddSample(a, 1);
+  }
+  stop = true;
+  audio.join();
+  CHECK(reads.load() > 0);
+  CHECK(m.DynamicCount() == 1);
+}
+
+// ---------------------------------------------------------------- StateFormat (with an IByteChunk-like fake)
+struct FakeStr
+{
+  std::string s;
+  const char* Get() const { return s.c_str(); }
+};
+
+struct FakeChunk
+{
+  std::vector<uint8_t> bytes;
+  int PutBytes(const void* p, int n)
+  {
+    auto* b = static_cast<const uint8_t*>(p);
+    bytes.insert(bytes.end(), b, b + n);
+    return Size();
+  }
+  template <class T>
+  int Put(const T* v) { return PutBytes(v, sizeof(T)); }
+  int PutStr(const char* str)
+  {
+    int len = static_cast<int>(std::strlen(str));
+    Put(&len);
+    return PutBytes(str, len);
+  }
+  int GetBytes(void* dst, int n, int pos) const
+  {
+    if (pos < 0 || n < 0 || pos + n > Size())
+      return -1;
+    std::memcpy(dst, bytes.data() + pos, n);
+    return pos + n;
+  }
+  template <class T>
+  int Get(T* v, int pos) const { return GetBytes(v, sizeof(T), pos); }
+  int GetStr(FakeStr& str, int pos) const
+  {
+    int len = 0;
+    pos = Get(&len, pos);
+    if (pos < 0 || len < 0 || pos + len > Size())
+      return -1;
+    str.s.assign(reinterpret_cast<const char*>(bytes.data() + pos), len);
+    return pos + len;
+  }
+  int Size() const { return static_cast<int>(bytes.size()); }
+};
+
+static SampleData::Slot MakeSlot(std::vector<int8_t> d, uint32_t sr, std::string path, std::string pipe)
+{
+  SampleData::Slot s;
+  s.data = std::move(d);
+  s.sampleRate = sr;
+  s.path = std::move(path);
+  s.pipeline = std::move(pipe);
+  return s;
+}
+
+TEST(State_V2RoundTrip)
+{
+  FakeChunk c;
+  int marker = 1234;
+  c.Put(&marker); // stands in for the serialized params
+  OneBitState::Write(c, {MakeSlot({1, 2, 3}, 48000, "a.wav", "P1"), MakeSlot({4}, 44100, "b.wav", "")});
+  int trailer = 99;
+  c.Put(&trailer);
+
+  OneBitState::Data d;
+  int pos = OneBitState::Read<FakeStr>(c, 4, d);
+  CHECK(d.valid && d.version == 2 && d.dspVersion == OneBitState::kLatestDspVersion);
+  CHECK(d.slots.size() == 2);
+  CHECK(d.slots[0].data == std::vector<int8_t>({1, 2, 3}) && d.slots[0].sampleRate == 48000 && d.slots[0].path == "a.wav" && d.slots[0].pipeline == "P1");
+  CHECK(d.slots[1].path == "b.wav");
+  int readTrailer = 0;
+  CHECK(c.Get(&readTrailer, pos) > 0 && readTrailer == 99);
+}
+
+TEST(State_ReadsV1)
+{
+  // exactly what the original SerializeState wrote
+  FakeChunk c;
+  uint32_t version = 1, numSlots = 2;
+  c.Put(&version);
+  c.Put(&numSlots);
+  for (auto& [sr, bytes] : std::vector<std::pair<uint32_t, std::vector<int8_t>>>{{44100, {9, 8}}, {48000, {7}}})
+  {
+    uint32_t size = static_cast<uint32_t>(bytes.size());
+    c.Put(&sr);
+    c.Put(&size);
+    c.PutBytes(bytes.data(), static_cast<int>(size));
+  }
+  uint32_t pathCount = 2;
+  c.Put(&pathCount);
+  c.PutStr("x.wav");
+  c.PutStr("PX");
+  c.PutStr("y.wav");
+  c.PutStr("");
+
+  OneBitState::Data d;
+  int pos = OneBitState::Read<FakeStr>(c, 0, d);
+  CHECK(pos == c.Size());
+  CHECK(d.valid && d.version == 1 && d.dspVersion == OneBitState::kDspVersionLegacy);
+  CHECK(d.slots.size() == 2 && d.slots[0].data == std::vector<int8_t>({9, 8}) && d.slots[0].path == "x.wav" && d.slots[0].pipeline == "PX");
+  CHECK(d.slots[1].sampleRate == 48000 && d.slots[1].path == "y.wav");
+}
+
+TEST(State_V0AndCorrupt)
+{
+  FakeChunk empty;
+  OneBitState::Data d;
+  CHECK(OneBitState::Read<FakeStr>(empty, 0, d) == 0);
+  CHECK(d.version == 0 && d.valid && d.slots.empty() && d.dspVersion == OneBitState::kDspVersionLegacy);
+
+  // truncated v2 block
+  FakeChunk c;
+  OneBitState::Write(c, {MakeSlot({1, 2, 3, 4}, 44100, "a.wav", "P")});
+  c.bytes.resize(c.bytes.size() - 3);
+  CHECK(OneBitState::Read<FakeStr>(c, 0, d) == 0);
+  CHECK(!d.valid && d.slots.empty());
+
+  // absurd size must be rejected without allocating
+  FakeChunk big;
+  uint32_t v = 2, dsp = 1, n = 1, sr = 44100, size = 0x7FFFFFFF;
+  big.Put(&v);
+  big.Put(&dsp);
+  big.Put(&n);
+  big.Put(&sr);
+  big.Put(&size);
+  CHECK(OneBitState::Read<FakeStr>(big, 0, d) == 0 && !d.valid);
+
+  // unknown future version
+  FakeChunk future;
+  uint32_t v9 = 9;
+  future.Put(&v9);
+  CHECK(OneBitState::Read<FakeStr>(future, 0, d) == 0 && !d.valid);
+}
+
+// ---------------------------------------------------------------- SampleImportWorker
+TEST(ImportWorker_RunsJobsInOrderOffThread)
+{
+  const auto mainId = std::this_thread::get_id();
+  std::atomic<bool> ranOffThread{true};
+  SampleImportWorker<int, int> worker([&](const int& job) {
+    if (std::this_thread::get_id() == mainId)
+      ranOffThread = false;
+    return job * 10;
+  });
+  for (int i = 1; i <= 5; ++i)
+    worker.Enqueue(i);
+
+  std::vector<int> results;
+  for (int tries = 0; tries < 500 && results.size() < 5; ++tries)
+  {
+    for (int r : worker.TakeResults())
+      results.push_back(r);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  CHECK(results == std::vector<int>({10, 20, 30, 40, 50}));
+  CHECK(ranOffThread.load());
+  CHECK(!worker.Busy());
+}
+
+TEST(ImportWorker_ShutdownWithPendingJobs)
+{
+  SampleImportWorker<int, int> worker([](const int& j) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    return j;
+  });
+  for (int i = 0; i < 20; ++i)
+    worker.Enqueue(i);
+  worker.Shutdown(); // must not hang or crash
+  CHECK(true);
+}
+
+TEST(PipelinePresets_Build)
+{
+  CHECK(PipelinePresets::DropBox().ToString() == "NormalizeEffect->SaturateEffect(10)->DitherEffect(0.1)->TrellisQuantizer(maxRam=67108864)");
+  CHECK(PipelinePresets::Kick2().ToString().find("DeltaSigmaQuantizer") != std::string::npos);
 }
 
 // ---------------------------------------------------------------- BitCompression

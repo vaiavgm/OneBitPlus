@@ -8,6 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(OneBitPlusTests TestMain.cpp)
 target_include_directories(OneBitPlusTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+find_package(Threads REQUIRED)
+target_link_libraries(OneBitPlusTests PRIVATE Threads::Threads)
+
 if(MSVC)
   target_compile_options(OneBitPlusTests PRIVATE /W4 /permissive-)
 else()

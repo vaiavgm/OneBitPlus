@@ -6,7 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
+#include <limits>
+#include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace SampleData
@@ -22,6 +27,8 @@ struct SampleInfo
   const int8_t* data = nullptr;
   size_t size = 0;
   uint32_t sampleRate = 44100;
+  // Generation of the sample bank `data` points into (0 = static data that is never freed).
+  uint64_t bankGeneration = 0;
 
   constexpr SampleInfo() = default;
 
@@ -35,104 +42,220 @@ struct SampleInfo
   }
 
   // Construct from raw pointer and size
-  constexpr SampleInfo(const int8_t* pData, size_t numBytes, uint32_t sr = 44100)
+  constexpr SampleInfo(const int8_t* pData, size_t numBytes, uint32_t sr = 44100, uint64_t generation = 0)
     : data(pData)
     , size(numBytes)
     , sampleRate(sr)
-    
+    , bankGeneration(generation)
   {
   }
 };
 
+// One imported sample: packed 1-bit data plus where it came from.
+struct Slot
+{
+  std::vector<int8_t> data;
+  uint32_t sampleRate = 44100;
+  std::string path;     // source file (for display / persistence)
+  std::string pipeline; // AudioPipeline::ToString() used to render it
+};
+
 // --- 3. Unified Sample Manager ---
+//
+// Threading model
+// ---------------
+// The dynamic samples live in an immutable `Bank`. Editing functions (AddSample, ClearDynamicSamples,
+// ReplaceDynamicSamples) are called from non-audio threads: they build a new bank and publish it with an
+// atomic pointer swap. The audio thread only ever does atomic loads (GetSampleForVelocity) and stores
+// (ReportOldestGenerationInUse), so it never blocks, allocates or frees.
+//
+// Voices keep raw pointers into a bank while they play. A replaced bank is therefore not freed right away:
+// it is retired, and freed by a later edit once the audio thread has reported that no voice uses a bank of
+// that generation (or older) any more. If the audio thread stops running, retired banks simply stay alive.
 class SampleManager
 {
-private:
-  struct DynamicSlot
-  {
-    std::vector<int8_t> data;
-    uint32_t sampleRate;
-  };
-
-  std::vector<DynamicSlot> mDynamicSlots;
-
-  // expose a few accessors for persistence / UI
-
-
-
+public:
   // Total number of velocity slots (one per MIDI velocity 0-127)
   static constexpr size_t kTotalSlots = 128;
 
-public:
-  size_t DynamicCount() const { return mDynamicSlots.size(); }
-
-  uint32_t GetDynamicSampleRate(size_t idx) const
-  {
-    if (idx >= mDynamicSlots.size())
-      return 0;
-    return mDynamicSlots[idx].sampleRate;
-  }
-  // Static prepared sample array evaluated entirely at compile time
+  // Static prepared sample array evaluated entirely at compile time.
   // A few slots can be reserved at compile time. The rest of the 128 velocity slots
-  // map to dynamic samples stored in mDynamicSlots.
+  // map to dynamic samples.
   // Example: uncomment and adjust to reserve prepared slots:
   // static constexpr std::array<SampleInfo, 2> kPreparedSamples = {SampleInfo(kMyKick), SampleInfo(kMySnare)};
   static constexpr std::array<SampleInfo, 0> kPreparedSamples = {};
-
   static constexpr size_t kPreparedCount = kPreparedSamples.size();
+  static constexpr size_t kMaxDynamicSlots = kTotalSlots - 1 - kPreparedCount; // velocity 0 is note-off
 
-  // static constexpr std::array<SampleInfo, 3> kPreparedSamples = {SampleInfo(HR16_Crash02), SampleInfo(XIL_snare_9), SampleInfo(XIL_kick_6)};
+  SampleManager() { Publish(std::make_shared<Bank>()); }
 
+  SampleManager(const SampleManager&) = delete;
+  SampleManager& operator=(const SampleManager&) = delete;
 
+  // ------------------------------------------------------------------ editing (non-audio threads)
 
-
-  // Add packed dynamic samples. Dynamic slots occupy the remaining velocity slots
-  // after the prepared slots. Returns the dynamic index on success, or -1 if
-  // there is no remaining slot available (max kTotalSlots - kPreparedCount).
-  int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100)
+  // Add a packed dynamic sample. Returns its dynamic index, or -1 if all slots are used.
+  // Dynamic index i is played by MIDI velocity kPreparedCount + 1 + i.
+  int AddSample(const int8_t* data, size_t size, uint32_t sampleRate = 44100, std::string path = {}, std::string pipeline = {})
   {
-    const size_t maxDynamic = kTotalSlots - kPreparedCount;
-    if (mDynamicSlots.size() >= maxDynamic)
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    if (mCurrentOwner->slots.size() >= kMaxDynamicSlots)
       return -1;
-    mDynamicSlots.push_back(DynamicSlot{std::vector<int8_t>(data, data + size), sampleRate});
-    return static_cast<int>(mDynamicSlots.size() - 1);
+
+    auto slot = std::make_shared<Slot>();
+    slot->data.assign(data, data + size);
+    slot->sampleRate = sampleRate;
+    slot->path = std::move(path);
+    slot->pipeline = std::move(pipeline);
+
+    auto bank = std::make_shared<Bank>(*mCurrentOwner); // copies shared_ptrs only, not sample data
+    bank->slots.push_back(std::move(slot));
+    const int idx = static_cast<int>(bank->slots.size() - 1);
+    PublishLocked(std::move(bank));
+    return idx;
   }
 
-  void ClearDynamicSamples() { mDynamicSlots.clear(); }
+  void ClearDynamicSamples()
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    PublishLocked(std::make_shared<Bank>());
+  }
+
+  // Replace all dynamic samples at once (e.g. when restoring state). Extra slots beyond the limit are dropped.
+  void ReplaceDynamicSamples(std::vector<Slot> slots)
+  {
+    auto bank = std::make_shared<Bank>();
+    for (auto& s : slots)
+    {
+      if (bank->slots.size() >= kMaxDynamicSlots)
+        break;
+      bank->slots.push_back(std::make_shared<Slot>(std::move(s)));
+    }
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    PublishLocked(std::move(bank));
+  }
+
+  // ------------------------------------------------------------------ queries (non-audio threads)
+
+  size_t DynamicCount() const { return Snapshot()->slots.size(); }
+
+  uint32_t GetDynamicSampleRate(size_t idx) const
+  {
+    auto bank = Snapshot();
+    return idx < bank->slots.size() ? bank->slots[idx]->sampleRate : 0;
+  }
 
   std::vector<int8_t> GetDynamicSampleData(int index) const
   {
-    if (index < 0 || index >= static_cast<int>(mDynamicSlots.size()))
+    auto bank = Snapshot();
+    if (index < 0 || index >= static_cast<int>(bank->slots.size()))
       return {};
-    return mDynamicSlots[index].data;
+    return bank->slots[index]->data;
   }
 
-  // Ultra-fast velocity lookup
+  // A consistent copy of all dynamic slots (for serialization / UI).
+  std::vector<Slot> CopyDynamicSlots() const
+  {
+    auto bank = Snapshot();
+    std::vector<Slot> out;
+    out.reserve(bank->slots.size());
+    for (const auto& s : bank->slots)
+      out.push_back(*s);
+    return out;
+  }
+
+  // ------------------------------------------------------------------ audio thread (lock-free)
+
+  // Map normalized velocity [0..1] to a sample. Never blocks or allocates.
   SampleInfo GetSampleForVelocity(double level) const
   {
     // Map normalized level [0..1] to MIDI velocities 1..127 (no velocity 0).
     // Use level*127 + 0.5 to round to the nearest integer velocity, then clamp to [1,127].
     int velInt = std::clamp(static_cast<int>(level * 127.0 + 0.5), 1, 127);
 
-    // Map velocity directly to a stable slot index.
     // Velocities 1..kPreparedCount map to prepared static samples (index = vel-1).
     // Velocities (kPreparedCount+1)..127 map to dynamic slots at index (vel - kPreparedCount - 1).
-
     if (velInt <= static_cast<int>(kPreparedCount))
     {
       return kPreparedSamples[velInt - 1];
     }
 
+    const Bank* bank = mCurrent.load(std::memory_order_acquire);
     size_t dynamicIdx = static_cast<size_t>(velInt) - kPreparedCount - 1;
-    if (dynamicIdx < mDynamicSlots.size() && !mDynamicSlots[dynamicIdx].data.empty())
+    if (dynamicIdx < bank->slots.size() && !bank->slots[dynamicIdx]->data.empty())
     {
-      const auto& slot = mDynamicSlots[dynamicIdx];
-      return SampleInfo(slot.data.data(), slot.data.size(), slot.sampleRate);
+      const Slot& slot = *bank->slots[dynamicIdx];
+      return SampleInfo(slot.data.data(), slot.data.size(), slot.sampleRate, bank->generation);
     }
 
     // Requested velocity maps to an uninitialized slot -> silence
     return SampleInfo(kSilence);
   }
+
+  // Generation of the bank that GetSampleForVelocity currently reads.
+  uint64_t CurrentGeneration() const { return mCurrent.load(std::memory_order_acquire)->generation; }
+
+  // Called by the audio thread (e.g. once per block) with the oldest bank generation any voice still
+  // references, or CurrentGeneration() if none does. Banks older than this may be freed.
+  void ReportOldestGenerationInUse(uint64_t generation) { mOldestInUse.store(generation, std::memory_order_release); }
+
+  // For tests / diagnostics: number of replaced banks that are not freed yet.
+  size_t RetiredBankCount() const
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    return mRetired.size();
+  }
+
+  // Free retired banks that the audio thread no longer uses (also done automatically on every edit).
+  void CollectGarbage()
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    CollectGarbageLocked();
+  }
+
+private:
+  struct Bank
+  {
+    std::vector<std::shared_ptr<const Slot>> slots;
+    uint64_t generation = 0;
+  };
+
+  std::shared_ptr<const Bank> Snapshot() const
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    return mCurrentOwner;
+  }
+
+  void Publish(std::shared_ptr<Bank> bank)
+  {
+    std::lock_guard<std::mutex> lock(mEditMutex);
+    PublishLocked(std::move(bank));
+  }
+
+  void PublishLocked(std::shared_ptr<Bank> bank)
+  {
+    bank->generation = ++mLastGeneration;
+    if (mCurrentOwner)
+      mRetired.push_back(mCurrentOwner);
+    mCurrentOwner = std::move(bank);
+    mCurrent.store(mCurrentOwner.get(), std::memory_order_release);
+    CollectGarbageLocked();
+  }
+
+  void CollectGarbageLocked()
+  {
+    const uint64_t oldestInUse = mOldestInUse.load(std::memory_order_acquire);
+    mRetired.erase(std::remove_if(mRetired.begin(), mRetired.end(), [oldestInUse](const std::shared_ptr<const Bank>& b) { return b->generation < oldestInUse; }), mRetired.end());
+  }
+
+  mutable std::mutex mEditMutex;                  // guards everything below except the atomics
+  std::shared_ptr<const Bank> mCurrentOwner;      // owns the bank mCurrent points to
+  std::vector<std::shared_ptr<const Bank>> mRetired; // replaced banks that voices may still use
+  uint64_t mLastGeneration = 0;
+
+  std::atomic<const Bank*> mCurrent{nullptr};
+  // Nothing is freed until the audio thread reports in for the first time.
+  std::atomic<uint64_t> mOldestInUse{0};
 };
 
 } // namespace SampleData
