@@ -2,6 +2,7 @@
 #include <IPlug_include_in_plug_src.h>
 
 #include <IControls.h>
+#include <IVDisplayControl.h>
 #include <IGraphicsStructs.h>
 #include <IPlugLogger.h>
 #include <LFO.h>
@@ -211,6 +212,27 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
         IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), TypeParam(t, kParamExtraDetune1), "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
     }
 
+    //////////////// VISUALISATION AND PLAYING SURFACE
+    // LFO displays next to each instrument row (PWM LFO on top, pitch LFO below)
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      const float vert = 330.0f - 110.0f * t;
+      pGraphics->AttachControl(new IVDisplayControl(IRECT(1140.0, 22.0f + vert, 1290.0, 70.0f + vert), "PWM LFO", SMALLER_LABEL, EDirection::Horizontal, -1.f, 1.f, 0.f, 256), kCtrlTagLFOVisFirst + 2 * t);
+      pGraphics->AttachControl(new IVDisplayControl(IRECT(1140.0, 72.0f + vert, 1290.0, 120.0f + vert), "Pitch LFO", SMALLER_LABEL, EDirection::Horizontal, -1.f, 1.f, 0.f, 256), kCtrlTagLFOVisFirst + 2 * t + 1);
+    }
+
+    pGraphics->AttachControl(new IVScopeControl<1>(IRECT(380.0, 470.0, 760.0, 600.0), "Output", SMALLER_LABEL), kCtrlTagScope);
+    pGraphics->AttachControl(new IVMeterControl<2>(IRECT(1235.0, 470.0, 1290.0, 600.0), "Level", SMALLER_LABEL), kCtrlTagMeter);
+
+    // pitch bend + mod wheel, keyboard (notes 0-3 = noise/sampler are below its range; use the drop box for the sampler)
+    pGraphics->AttachControl(new IWheelControl(IRECT(320.0, 610.0, 345.0, 695.0)), kCtrlTagBender);
+    pGraphics->AttachControl(new IWheelControl(IRECT(350.0, 610.0, 375.0, 695.0), IMidiMsg::EControlChangeMsg::kModWheel));
+    pGraphics->AttachControl(new IVKeyboardControl(IRECT(380.0, 610.0, 1290.0, 695.0), 36, 96), kCtrlTagKeyboard);
+    pGraphics->SetQwertyMidiKeyHandlerFunc([pGraphics](const IMidiMsg& msg) {
+      if (auto* pKeyboard = pGraphics->GetControlWithTag(kCtrlTagKeyboard))
+        pKeyboard->As<IVKeyboardControl>()->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
+    });
+
     IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
 
     mDropBox = new DragDropWaveformDisplay(
@@ -350,6 +372,15 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   memset(outputs[1], 0, nFrames * sizeof(sample));
 
   mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
+
+  // visualisation only (lock-free, no allocation)
+  mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
+  mScopeSender.ProcessBlock(outputs, nFrames, kCtrlTagScope, 1);
+  for (int t = 0; t < kNumTypes; ++t)
+  {
+    mLFOVisSender.PushData({kCtrlTagLFOVisFirst + 2 * t, {static_cast<float>(mDSP.mPwmLFOs[t].GetLastOutput())}});
+    mLFOVisSender.PushData({kCtrlTagLFOVisFirst + 2 * t + 1, {static_cast<float>(mDSP.mPitchLFOs[t].GetLastOutput())}});
+  }
 }
 
 void VaiaOneBitPlus::OnIdle()
@@ -365,6 +396,10 @@ void VaiaOneBitPlus::OnIdle()
   if (imported)
     ShowLatestSample();
 
+  mMeterSender.TransmitData(*this);
+  mScopeSender.TransmitData(*this);
+  mLFOVisSender.TransmitData(*this);
+
   // free sample banks the audio thread no longer uses (also happens on every edit)
   mDSP.mSampleManager.CollectGarbage();
 }
@@ -375,6 +410,7 @@ void VaiaOneBitPlus::OnReset()
 
   // 1. Reset DSP state and buffer allocations
   mDSP.Reset(currentSampleRate, GetBlockSize());
+  mMeterSender.Reset(currentSampleRate);
 
   // Samples are kept on a sample-rate change: each one stores the rate it was rendered at.
   // (They used to be cleared here, which lost every dropped or restored sample.)

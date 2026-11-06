@@ -57,7 +57,7 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 ## Threading
 
 - **Audio thread**: `ProcessBlock`, `ProcessMidiMsg`, `Voice::*`. It reads samples lock-free through `SampleManager::GetSampleForVelocity`, and calls `OneBitPlusDSP::ReportSampleBankUsage()` once per block.
-- **UI/main thread**: `mLayoutFunc`, the drop callback (it only queues a job), and `OnIdle` (collects import results, refreshes the drop box, frees retired sample banks).
+- **UI/main thread**: `mLayoutFunc`, the drop callback (it only queues a job), and `OnIdle` (collects import results, refreshes the drop box, frees retired sample banks, and sends the meter, scope and LFO data queued by `ProcessBlock` to the controls).
 - **Import worker thread** (`SampleImportWorker`): load → resample → pipeline → 1-bit → `SampleManager::AddSample`.
 - **Host-dependent**: `OnParamChange` → `mDSP.SetParam`, `OnReset`, `Serialize/UnserializeState`. Sample edits from here are safe too.
 

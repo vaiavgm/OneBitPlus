@@ -46,9 +46,10 @@ public:
   void OnParamChangeUI(int paramIdx, EParamSource source) override;
 
   OneBitPlusDSP<sample> mDSP{ 32 };
+  // audio -> UI visualisation (lock-free queues, drained in OnIdle)
   IPeakSender<2> mMeterSender;
-  ISender<1> mLFOVisSender;
-  ISender<1> mOscilloscopeVisSender;
+  ISender<1, 512> mLFOVisSender;   // one value per LFO per block, for 8 LFOs
+  IBufferSender<1> mScopeSender;   // L == R, so one channel is enough
   DragDropWaveformDisplay* mDropBox = nullptr; // owned by IGraphics, nullptr while the editor is closed
 
   // MIDI note that triggers the sampler (notes 0-2 are noise, see Voice::ProcessSamplesAccumulating)

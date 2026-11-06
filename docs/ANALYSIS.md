@@ -118,7 +118,7 @@ Severity: 🔴 high (wrong output, crash/UB, data loss) · 🟠 medium (feature 
 | Samples | There is no pipeline/quantizer selection UI: it is hard-coded in the drop lambda (`:669-673`). |
 | Samples | ~~Heavy import (Lanczos plus trellis, which can take seconds) runs **synchronously on the UI thread** and freezes the editor.~~ ✅ Phase 2: `SampleImportWorker` renders on a background thread, and `OnIdle` updates the drop box. |
 | MIDI/MPE | `PLUG_DOES_MPE 1`, but timbre and pressure are ignored (`mTimbreBuffer` is written and never read). Program change is routed but unhandled. All MIDI is echoed to MIDI out, which can loop back in some hosts. |
-| UI | No keyboard, pitch-bend wheel, meter, LFO visualiser or scope, even though the senders and control tags exist (`mMeterSender`, `mLFOVisSender`, `mOscilloscopeVisSender`, `kCtrlTagBender`, …). `OnIdle()` is empty, and `OnMessage` handles a bender that doesn't exist. |
+| UI | ✅ *Phase 5: added a keyboard (C1-C7, with QWERTY input), pitch-bend and mod wheels, an output scope, a level meter, and PWM/pitch LFO displays per type. Unused tags were removed.* Originally: No keyboard, pitch-bend wheel, meter, LFO visualiser or scope, even though the senders and control tags exist (`mMeterSender`, `mLFOVisSender`, `mOscilloscopeVisSender`, `kCtrlTagBender`, …). `OnIdle()` is empty, and `OnMessage` handles a bender that doesn't exist. |
 | UI | ~~The layout is hand-copied 4× (~370 lines). The three `IVStyle`s differ only in font sizes.~~ ✅ Phase 3: one loop over the types and a `MakeStyle` helper (the unused `LARGER_LABEL` was dropped). |
 | Config | Template leftovers: `PLUG_URL_STR` (iplug2.github.io), `AAX_TYPE_IDS 'IPI1','IPI2'` (collide with every other iPlug2 template plugin), `AAX_PLUG_NAME_STR "OneBitPlus\nIPIS"`, placeholder `changelog.txt`/`known-issues.txt`. |
 | Config | `PLUG_CHANNEL_IO "2-2"` on an instrument (`PLUG_TYPE 1`). It should be `"0-2"`: the inputs are never used, and hosts may treat it as an effect. |
@@ -168,11 +168,12 @@ Decisions (from review):
 | 2 | Sample lifecycle: immutable sample bank (B3), keep samples on a rate change (B2), state v2 + migration hook (`dspVersion`, `MigrateParams`), validation, background import. VST2 chunks deliberately left off. | no (keeps samples that used to be lost) | ✅ done |
 | 3 | Dedup: param/UI generation in loops, LFO arrays, dead-code removal, unique param *display* names (indices unchanged) | no | ✅ done |
 | 4 | Performance with bit-identical output: detune ratios once per block, `static_cast`, smoothing only the 9 smoothed lanes, no unused timbre write, trellis grid reuse (~35 % faster import). Added the render regression harness (`tests/render/`), which shows **identical output from `main` through Phase 4**. | no (verified by render hash) | ✅ done |
-| 5 | UI: meter, scope, LFO visualiser, keyboard and pitch wheel | no | ⏳ |
+| 5 | UI: meter, scope, 8 LFO displays, keyboard, pitch and mod wheel | no | ✅ done |
 | 6 🎧 | Sound: B4 sample rate, B8 tempo, B9 release (with migration), B10 DC blocker, noise fixes, PWM wrap, Pitch Keytrack, control-rate pitch | **yes** | waiting for the listening session |
 
 ## 5. To discuss later
 
 - **A. FX-chain pipeline builder.** A minimal GUI for picking the import effects and quantizer, with their parameters, instead of the hard-coded drop lambda. The chain would be stored per sample (it already is, as a string: `mSamplePipelines`). Needs: an effect factory from that string, and a small list/editor control.
 - **B. Correct note release.** *(Groundwork in Phase 2: state v2 stores a `dspVersion` (currently 1), and `VaiaOneBitPlus::MigrateParams` is the hook. Phase 6 bumps it to 2 and resets the Release params when loading older states.)* Release stages are currently inaudible (B9). Once release works, existing projects would start sounding different, so state migration resets **all 8 Release params to 0** for states saved before the fix. The fix-era version is v2. "v1" is the current sample-block version, and unversioned or param-only states count as v1. Caveat: hosts that restore by parameter values instead of the state chunk (VST2 without chunks) can't be migrated.
+- The Dither slider overlaps the drop box. It is left as-is for now because both Dither and Input Protect are inactive: decide in Phase 6 whether to implement or remove them.
 - Changing `PLUG_CHANNEL_IO` to `"0-2"` and replacing the template AAX/URL IDs: hygiene only, kept as-is for compatibility.
