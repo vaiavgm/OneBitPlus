@@ -5,8 +5,6 @@
 #include "Oscillator.h"
 #include <cmath>
 
-#include <format>
-#include <windows.h>
 
 
 
@@ -38,12 +36,12 @@ public:
     }
 
 
-    while (m_pwm > 1) {
-      m_pwm--;
-    }
-    while (m_pwm < 0) {
-      m_pwm++;
-    }
+    // Wrap the pulse width into [0, 1] without looping (the key-tracked / modulated width can be far outside).
+    // Same result as subtracting 1 while > 1 and adding 1 while < 0: exactly 1.0 stays 1.0 (100 % = constant high).
+    if (m_pwm > 1.0)
+      m_pwm -= std::ceil(m_pwm) - 1.0;
+    else if (m_pwm < 0.0)
+      m_pwm += std::ceil(-m_pwm);
 
     if (m_pwm == 0) return 0.0;
 

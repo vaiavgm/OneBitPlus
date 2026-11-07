@@ -6,21 +6,15 @@
 class RawQuantizer : public IQuantizer
 {
 public:
-  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t sampleRate) override
+  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t /*sampleRate*/) override
   {
     std::vector<bool> outBits(input.size());
-    double error = 0.0;
-
     for (size_t i = 0; i < input.size(); ++i)
     {
-
-      bool bit = (input[i] >= 0.0);
-      double quantized = bit ? 1.0 : -1.0;
-
-      outBits[i] = bit;
+      outBits[i] = (input[i] >= 0.0);
     }
 
     return outBits;
   }
-  std::string ToString() const { return std::string("RawQuantizer"); }
+  std::string ToString() const override { return std::string("RawQuantizer"); }
 };

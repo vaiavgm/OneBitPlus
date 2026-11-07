@@ -47,12 +47,6 @@ public:
   const std::vector<uint8_t>& getBytes() const { return bytes; }
 };
 
-// Custom hash to use pair/struct keys inside unordered_map
-struct MaskHash
-{
-  std::size_t operator()(uint32_t val) const { return std::hash<uint32_t>{}(val); }
-};
-
 class BitStreamAnalyzer
 {
 private:
@@ -105,8 +99,11 @@ public:
   static double evaluateMetricsEliasGamma(const std::vector<bool>& bits, int L, int K, bool verbose)
   {
     size_t totalBits = bits.size();
+    if (L <= 0 || L > 64 || K <= 0 || totalBits < static_cast<size_t>(L))
+      return 100.0; // nothing to compress (also avoids size_t underflow in the loop below)
+
     std::vector<uint64_t> chunks;
-    for (size_t i = 0; i <= totalBits - L; i += L)
+    for (size_t i = 0; i + L <= totalBits; i += L)
     {
       uint64_t val = 0;
       for (int b = 0; b < L; ++b)
@@ -271,8 +268,11 @@ public:
   static double evaluateMetrics(const std::vector<bool>& bits, int L, int K, bool verbose)
   {
     size_t totalBits = bits.size();
+    if (L <= 0 || L > 64 || K <= 0 || totalBits < static_cast<size_t>(L))
+      return 100.0; // nothing to compress (also avoids size_t underflow in the loop below)
+
     std::vector<uint64_t> chunks;
-    for (size_t i = 0; i <= totalBits - L; i += L)
+    for (size_t i = 0; i + L <= totalBits; i += L)
     {
       uint64_t val = 0;
       for (int b = 0; b < L; ++b)
@@ -334,7 +334,10 @@ public:
       }
       std::cout << "=========================================================\n\n";
     }
-    int k_bits = (K == 4) ? 2 : ((K == 8) ? 3 : 4);
+    // number of bits needed to address K dictionary entries: ceil(log2(K)), at least 1
+    int k_bits = 1;
+    while ((1 << k_bits) < K)
+      ++k_bits;
 
     // --- Serialize to Byte Stream & Calculate Standard Compression Rate ---
     BitWriter writer;

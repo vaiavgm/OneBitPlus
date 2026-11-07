@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <string>
 #include <string_view>
 #include <fstream>
 #include <iterator>
@@ -48,7 +49,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
     case 8:
       for (int i = 0; i < numSamples; ++i) {
         int32_t sampleVal = static_cast<int32_t>(fileBuffer[dataOffset + i]) - 128;
-        sampleBuffer.push_back(sampleVal << 24); // Scale to 32-bit
+        sampleBuffer.push_back(sampleVal * 16777216); // Scale to 32-bit (multiply: left-shifting negatives is UB before C++20)
       }
       break;
 
@@ -56,7 +57,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
       for (int i = 0; i < numSamples; ++i) {
         int16_t val;
         std::memcpy(&val, &fileBuffer[dataOffset + i * bytesPerSample], sizeof(int16_t));
-        sampleBuffer.push_back(static_cast<int32_t>(val) << 16); // Scale to 32-bit
+        sampleBuffer.push_back(static_cast<int32_t>(val) * 65536); // Scale to 32-bit (multiply: left-shifting negatives is UB before C++20)
       }
       break;
 
@@ -69,7 +70,7 @@ static inline void load_samples(const std::vector<uint8_t>& fileBuffer, std::vec
         if (sampleVal & 0x800000) {
           sampleVal |= 0xFF000000; 
         }
-        sampleBuffer.push_back(sampleVal << 8); // Scale to 32-bit
+        sampleBuffer.push_back(static_cast<int32_t>(static_cast<uint32_t>(sampleVal) << 8)); // Scale to 32-bit (shift unsigned, no UB)
       }
       break;
 
@@ -209,9 +210,9 @@ inline auto SampleLoader::load_file_static(const char* path) const -> LoadedSamp
     for (size_t i = 0; i < numSamples; ++i) {
       float f;
       std::memcpy(&f, &fileBuffer[dataOffset + i * 4], sizeof(float));
-      if (f > 1.0f) f = 1.0f;
-      if (f < -1.0f) f = -1.0f;
-      sampleBuffer.push_back(static_cast<int32_t>(f * 2147483647.0f));
+      // scale in double: 1.0f * 2147483647.0f rounds to 2^31 in float, which overflows int32
+      const double d = std::clamp(static_cast<double>(f), -1.0, 1.0);
+      sampleBuffer.push_back(static_cast<int32_t>(d * 2147483647.0));
     }
   } else {
     load_samples(fileBuffer, sampleBuffer, header, dataOffset, dataSize);

@@ -3,13 +3,15 @@
 #include "VaiaBuildTag.h"
 
 #include <IControls.h>
+#include <IVDisplayControl.h>
 #include <IGraphicsStructs.h>
 #include <IPlugLogger.h>
 #include <LFO.h>
 
 #include "src/SampleLoader.h"
 #include "src/SampleData.h"
-#include "src/IScrollContainer.h"
+#include <IPlugPaths.h>
+#include "src/PipelinePresets.h"
 #include "src/Debug.h"
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
@@ -18,126 +20,58 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
-  GetParam(kInputDither)->InitPercentage("Input Dither", 0., 0., 100.);
-  GetParam(kInputProtect)->InitPercentage("Input Protection", 0., 0., 100.);
+  // retired param: kept only so that saved states keep their layout (see Params.h)
+  GetParam(kParamUnused1)->InitDouble("(unused 1)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
+  // Sampler Pitch: off = the sampler always plays at its recorded speed (the original behaviour)
+  GetParam(kParamSamplerPitch)->InitBool("Sampler Pitch", false);
 
-  // OSC 1
-  GetParam(kParamPwmAttack1)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmDecay1)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmSustain1)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmRelease1)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmLFOShape1)->InitEnum("LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPwmLFORateHz1)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPwmLFORateTempo1)->InitEnum("LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPwmLFORateMode1)->InitBool("LFO Sync", true);
-  GetParam(kParamPwmLFODepth1)->InitPercentage("LFO Depth");
-  GetParam(kParamPwmModPow1)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
-  GetParam(kParamPwmOffset1)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
-  GetParam(kParamPwmKeyTrack1)->InitBool("PWM Keytrack", false);
+  // Instrument types I-IV: identical parameter blocks (see Params.h). Ranges, defaults and the order of
+  // the parameters are unchanged from the original per-type code. Only the display names got a "T<n>" prefix,
+  // so host automation lanes can be told apart. Parameter indices (what hosts store) are unchanged.
+  for (int t = 0; t < kNumTypes; ++t)
+  {
+    auto P = [this, t](int type1Param) { return GetParam(TypeParam(t, type1Param)); };
+    const std::string prefix = "T" + std::to_string(t + 1) + " ";
+    auto N = [&prefix](const char* name) { return prefix + name; };
 
-  GetParam(kParamPitchAttack1)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchDecay1)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchSustain1)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchRelease1)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchLFOShape1)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPitchLFORateHz1)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPitchLFORateTempo1)->InitEnum("Pitch LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPitchLFORateMode1)->InitBool("Pitch LFO Sync", true);
-  GetParam(kParamPitchLFODepth1)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow1)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
-  GetParam(kParamPitchOffset1)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
-  GetParam(kParamPitchKeyTrack1)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
-  GetParam(kParamExtraUnison1)->InitInt("Extra Unison", 1, 1, 8);
-  GetParam(kParamExtraDetune1)->InitDouble("Extra Detune", 0.0, 0.0, 100.0, 0.5);
+    P(kParamPwmAttack1)->InitDouble(N("PWM Attack").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+    P(kParamPwmDecay1)->InitDouble(N("PWM Decay").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+    P(kParamPwmSustain1)->InitDouble(N("PWM Sustain").c_str(), 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+    P(kParamPwmRelease1)->InitDouble(N("PWM Release").c_str(), 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+    P(kParamPwmLFOShape1)->InitEnum(N("PWM LFO Shape").c_str(), LFO<>::kTriangle, {LFO_SHAPE_VALIST});
+    P(kParamPwmLFORateHz1)->InitFrequency(N("PWM LFO Rate Hz").c_str(), 1., 0.01, 40.);
+    P(kParamPwmLFORateTempo1)->InitEnum(N("PWM LFO Rate Sync").c_str(), LFO<>::k1, {LFO_TEMPODIV_VALIST});
+    P(kParamPwmLFORateMode1)->InitBool(N("PWM LFO Sync").c_str(), true);
+    P(kParamPwmLFODepth1)->InitPercentage(N("PWM LFO Depth").c_str());
+    P(kParamPwmModPow1)->InitDouble(N("PWM Mod").c_str(), 1.0, -2.0, 2.0, 0.05);
+    P(kParamPwmOffset1)->InitDouble(N("PWM Offset").c_str(), 0.5, 0.0025, 0.9975, 0.01);
+    P(kParamPwmKeyTrack1)->InitBool(N("PWM Keytrack").c_str(), false);
 
-  // OSC 2
-  GetParam(kParamPwmAttack2)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmDecay2)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmSustain2)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmRelease2)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmLFOShape2)->InitEnum("LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPwmLFORateHz2)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPwmLFORateTempo2)->InitEnum("LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPwmLFORateMode2)->InitBool("LFO Sync", true);
-  GetParam(kParamPwmLFODepth2)->InitPercentage("LFO Depth");
-  GetParam(kParamPwmModPow2)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
-  GetParam(kParamPwmOffset2)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
-  GetParam(kParamPwmKeyTrack2)->InitBool("PWM Keytrack", false);
+    P(kParamPitchAttack1)->InitDouble(N("Pitch Attack").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+    P(kParamPitchDecay1)->InitDouble(N("Pitch Decay").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
+    P(kParamPitchSustain1)->InitDouble(N("Pitch Sustain").c_str(), 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
+    P(kParamPitchRelease1)->InitDouble(N("Pitch Release").c_str(), 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
+    P(kParamPitchLFOShape1)->InitEnum(N("Pitch LFO Shape").c_str(), LFO<>::kTriangle, {LFO_SHAPE_VALIST});
+    P(kParamPitchLFORateHz1)->InitFrequency(N("Pitch LFO Rate Hz").c_str(), 1., 0.01, 40.);
+    P(kParamPitchLFORateTempo1)->InitEnum(N("Pitch LFO Rate Sync").c_str(), LFO<>::k1, {LFO_TEMPODIV_VALIST});
+    P(kParamPitchLFORateMode1)->InitBool(N("Pitch LFO Sync").c_str(), true);
+    P(kParamPitchLFODepth1)->InitPercentage(N("Pitch LFO Depth").c_str());
+    P(kParamPitchModPow1)->InitDouble(N("Pitch Mod").c_str(), 1, -4.0, 4.0, 0.05);
+    P(kParamPitchOffset1)->InitDouble(N("Pitch Offset").c_str(), 0.0, -1.0, 1.0, 0.01);
+    P(kParamPitchKeyTrack1)->InitDouble(N("Pitch Keytrack").c_str(), 0.0, -2.0, 2.0, 0.05);
+    P(kParamExtraUnison1)->InitInt(N("Extra Unison").c_str(), 1, 1, 8);
+    P(kParamExtraDetune1)->InitDouble(N("Extra Detune").c_str(), 0.0, 0.0, 100.0, 0.5);
+  }
 
-
-  GetParam(kParamPitchAttack2)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchDecay2)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchSustain2)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchRelease2)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchLFOShape2)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPitchLFORateHz2)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPitchLFORateTempo2)->InitEnum("Pitch LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPitchLFORateMode2)->InitBool("Pitch LFO Sync", true);
-  GetParam(kParamPitchLFODepth2)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow2)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
-  GetParam(kParamPitchOffset2)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
-  GetParam(kParamPitchKeyTrack2)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
-  GetParam(kParamExtraUnison2)->InitInt("Extra Unison", 1, 1, 8);
-  GetParam(kParamExtraDetune2)->InitDouble("Extra Detune", 0.0, 0.0, 100.0, 0.5);
-
-  // OSC 3
-  GetParam(kParamPwmAttack3)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmDecay3)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmSustain3)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmRelease3)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmLFOShape3)->InitEnum("LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPwmLFORateHz3)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPwmLFORateTempo3)->InitEnum("LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPwmLFORateMode3)->InitBool("LFO Sync", true);
-  GetParam(kParamPwmLFODepth3)->InitPercentage("LFO Depth");
-  GetParam(kParamPwmModPow3)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
-  GetParam(kParamPwmOffset3)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
-  GetParam(kParamPwmKeyTrack3)->InitBool("PWM Keytrack", false);
-
-  GetParam(kParamPitchAttack3)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchDecay3)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchSustain3)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchRelease3)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchLFOShape3)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPitchLFORateHz3)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPitchLFORateTempo3)->InitEnum("Pitch LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPitchLFORateMode3)->InitBool("Pitch LFO Sync", true);
-  GetParam(kParamPitchLFODepth3)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow3)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
-  GetParam(kParamPitchOffset3)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
-  GetParam(kParamPitchKeyTrack3)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
-  GetParam(kParamExtraUnison3)->InitInt("Extra Unison", 1, 1, 8);
-  GetParam(kParamExtraDetune3)->InitDouble("Extra Detune", 0.0, 0.0, 100.0, 0.5);
-
-  // OSC 4
-  GetParam(kParamPwmAttack4)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmDecay4)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPwmSustain4)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmRelease4)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPwmLFOShape4)->InitEnum("LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPwmLFORateHz4)->InitFrequency("LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPwmLFORateTempo4)->InitEnum("LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPwmLFORateMode4)->InitBool("LFO Sync", true);
-  GetParam(kParamPwmLFODepth4)->InitPercentage("LFO Depth");
-  GetParam(kParamPwmModPow4)->InitDouble("PWM Mod", 1.0, -2.0, 2.0, 0.05);
-  GetParam(kParamPwmOffset4)->InitDouble("PWM Offset", 0.5, 0.0025, 0.9975, 0.01);
-  GetParam(kParamPwmKeyTrack4)->InitBool("PWM Keytrack", false);
-
-  GetParam(kParamPitchAttack4)->InitDouble("Attack", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchDecay4)->InitDouble("Decay", 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-  GetParam(kParamPitchSustain4)->InitDouble("Sustain", 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchRelease4)->InitDouble("Release", 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-  GetParam(kParamPitchLFOShape4)->InitEnum("Pitch LFO Shape", LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-  GetParam(kParamPitchLFORateHz4)->InitFrequency("Pitch LFO Rate", 1., 0.01, 40.);
-  GetParam(kParamPitchLFORateTempo4)->InitEnum("Pitch LFO Rate", LFO<>::k1, {LFO_TEMPODIV_VALIST});
-  GetParam(kParamPitchLFORateMode4)->InitBool("Pitch LFO Sync", true);
-  GetParam(kParamPitchLFODepth4)->InitPercentage("Pitch LFO Depth");
-  GetParam(kParamPitchModPow4)->InitDouble("Pitch Mod", 1, -4.0, 4.0, 0.05);
-  GetParam(kParamPitchOffset4)->InitDouble("Pitch Offset", 0.0, -1.0, 1.0, 0.01);
-  GetParam(kParamPitchKeyTrack4)->InitDouble("Pitch Keytrack", 0.0, -2.0, 2.0, 0.05);
-  GetParam(kParamExtraUnison4)->InitInt("Extra Unison", 1, 1, 8);
-  GetParam(kParamExtraDetune4)->InitDouble("Extra Detune", 0.0, 0.0, 100.0, 0.5);
-
+  // Chain presets: saved per user (e.g. %APPDATA%/Vaiaphraim/OneBitPlus/Presets), plus a read-only shared folder
+  // (e.g. C:/ProgramData/Vaiaphraim/OneBitPlus/Presets) that an installer can fill.
+  {
+    WDL_String userBase, sharedBase;
+    AppSupportPath(userBase, false);
+    AppSupportPath(sharedBase, true);
+    const std::filesystem::path sub = std::filesystem::path(PLUG_MFR) / PLUG_NAME / "Presets";
+    mPresets = ChainPresets::Store(std::filesystem::path(userBase.Get()) / sub, {std::filesystem::path(sharedBase.Get()) / sub});
+  }
 
   using namespace igraphics;
 
@@ -156,86 +90,38 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
 
     pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
 
-    const IVStyle DEFAULT_STYLE{
-      true, // Show label
-      true, // Show value
-      {
-        COLOR_TRANSPARENT,                                                              // Background
-        COLOR_MID_GRAY,                                                                 // Foreground
-        COLOR_LIGHT_GRAY,                                                               // Pressed
-        COLOR_DARK_GRAY,                                                                // Frame
-        COLOR_TRANSLUCENT,                                                              // Highlight
-        IColor(60, 0, 0, 0),                                                            // Shadow
-        COLOR_BLACK,                                                                    // Extra 1
-        COLOR_GREEN,                                                                    // Extra 2
-        COLOR_BLUE                                                                      // Extra 3
-      },                                                                                // Colors
-      IText(19.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Top, 0.0),    // Label text
-      IText(14.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Bottom, 0.0), // Value text
-      true,                                                                             // Hide cursor
-      true,                                                                             // Draw frame
-      true,                                                                             // Draw shadows
-      false,                                                                            // Emboss
-      0.0,                                                                              // Roundness
-      1.0,                                                                              // Frame thickness
-      3.0,                                                                              // Shadow offset
-      1.0,                                                                              // Widget frac
-      0.0                                                                               // Angle
+    // All styles share colours and geometry and differ only in label/value font size
+    auto MakeStyle = [](float labelSize, float valueSize) {
+      return IVStyle{
+        true, // Show label
+        true, // Show value
+        {
+          COLOR_TRANSPARENT,   // Background
+          COLOR_MID_GRAY,      // Foreground
+          COLOR_LIGHT_GRAY,    // Pressed
+          COLOR_DARK_GRAY,     // Frame
+          COLOR_TRANSLUCENT,   // Highlight
+          IColor(60, 0, 0, 0), // Shadow
+          COLOR_BLACK,         // Extra 1
+          COLOR_GREEN,         // Extra 2
+          COLOR_BLUE           // Extra 3
+        },
+        IText(labelSize, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Top, 0.0),    // Label text
+        IText(valueSize, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Bottom, 0.0), // Value text
+        true,  // Hide cursor
+        true,  // Draw frame
+        true,  // Draw shadows
+        false, // Emboss
+        0.0,   // Roundness
+        1.0,   // Frame thickness
+        3.0,   // Shadow offset
+        1.0,   // Widget frac
+        0.0    // Angle
+      };
     };
 
-    const IVStyle LARGER_LABEL{
-      true, // Show label
-      true, // Show value
-      {
-        COLOR_TRANSPARENT,                                                              // Background
-        COLOR_MID_GRAY,                                                                 // Foreground
-        COLOR_LIGHT_GRAY,                                                               // Pressed
-        COLOR_DARK_GRAY,                                                                // Frame
-        COLOR_TRANSLUCENT,                                                              // Highlight
-        IColor(60, 0, 0, 0),                                                            // Shadow
-        COLOR_BLACK,                                                                    // Extra 1
-        COLOR_GREEN,                                                                    // Extra 2
-        COLOR_BLUE                                                                      // Extra 3
-      },                                                                                // Colors
-      IText(20.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Top, 0.0),    // Label text
-      IText(20.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Bottom, 0.0), // Value text
-      true,                                                                             // Hide cursor
-      true,                                                                             // Draw frame
-      true,                                                                             // Draw shadows
-      false,                                                                            // Emboss
-      0.0,                                                                              // Roundness
-      1.0,                                                                              // Frame thickness
-      3.0,                                                                              // Shadow offset
-      1.0,                                                                              // Widget frac
-      0.0                                                                               // Angle
-    };
-
-    const IVStyle SMALLER_LABEL{
-      true, // Show label
-      true, // Show value
-      {
-        COLOR_TRANSPARENT,                                                              // Background
-        COLOR_MID_GRAY,                                                                 // Foreground
-        COLOR_LIGHT_GRAY,                                                               // Pressed
-        COLOR_DARK_GRAY,                                                                // Frame
-        COLOR_TRANSLUCENT,                                                              // Highlight
-        IColor(60, 0, 0, 0),                                                            // Shadow
-        COLOR_BLACK,                                                                    // Extra 1
-        COLOR_GREEN,                                                                    // Extra 2
-        COLOR_BLUE                                                                      // Extra 3
-      },                                                                                // Colors
-      IText(14.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Top, 0.0),    // Label text
-      IText(10.0, COLOR_BLACK, "Roboto-Regular", EAlign::Center, EVAlign::Bottom, 0.0), // Value text
-      true,                                                                             // Hide cursor
-      true,                                                                             // Draw frame
-      true,                                                                             // Draw shadows
-      false,                                                                            // Emboss
-      0.0,                                                                              // Roundness
-      1.0,                                                                              // Frame thickness
-      3.0,                                                                              // Shadow offset
-      1.0,                                                                              // Widget frac
-      0.0                                                                               // Angle
-    };
+    const IVStyle DEFAULT_STYLE = MakeStyle(19.0, 14.0);
+    const IVStyle SMALLER_LABEL = MakeStyle(14.0, 10.0);
 
     const IText HEADER_TEXT{20.0, "Roboto-Regular"};
 
@@ -252,594 +138,483 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(new ITextControl(IRECT(1070.0, 0.0f, 1220.0, 20.0f), "Extras", HEADER_TEXT));
 
 
-   // pGraphics->AttachControl(new IVSliderControl(IRECT(00.0, 35.0f + 440, 80.0, 120.0f + 440), kInputDither, "Dither", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-   // pGraphics->AttachControl(
-   //   new IVSlideSwitchControl(IRECT(340.0, 60.0f + 440, 360.0, 90.0f + 440), kInputProtect, "Input Protection", DEFAULT_STYLE.WithShowLabel(false), true, EDirection::Vertical));
 
-    //////////////// OSC 1
-
-
-    float vert = 330.0;
-    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type I", SMALL_TEXT));
-
-    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack1, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay1, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain1, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease1, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPwmLFORateHz1, sync);
-        pGraphics->HideControl(kParamPwmLFORateTempo1, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow1, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    //////////////// INSTRUMENT ROWS (Type I at the bottom, Type IV at the top)
+    static const char* kTypeNames[kNumTypes] = {"Type I", "Type II", "Type III", "Type IV"};
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      const float vert = 330.0f - 110.0f * t;
 
 
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack1, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay1, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain1, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease1, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode1, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPitchLFORateHz1, sync);
-        pGraphics->HideControl(kParamPitchLFORateTempo1, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz1, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth1, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape1, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack1, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow1, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset1, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), kTypeNames[t], SMALL_TEXT));
+
+      pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+      pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+      pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
+      pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
+
+      pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), TypeParam(t, kParamPwmAttack1), "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), TypeParam(t, kParamPwmDecay1), "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), TypeParam(t, kParamPwmSustain1), "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), TypeParam(t, kParamPwmRelease1), "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics
+        ->AttachControl(
+          new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), TypeParam(t, kParamPwmLFORateMode1), "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
+          kNoTag, "LFO");
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), TypeParam(t, kParamPwmLFORateTempo1), "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
+        ->DisablePrompt(false);
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), TypeParam(t, kParamPwmLFORateHz1), "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(new IVKnobControl(
+        IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), TypeParam(t, kParamPwmLFODepth1), "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), TypeParam(t, kParamPwmLFOShape1), "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
+        ->DisablePrompt(false);
+      pGraphics->AttachControl(
+        new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), TypeParam(t, kParamPwmKeyTrack1), "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical));
+      pGraphics->AttachControl(
+        new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), TypeParam(t, kParamPwmModPow1), "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(
+        new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), TypeParam(t, kParamPwmOffset1), "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison1, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune1, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-    //////////////// OSC 2
-
-    vert -= 110;
-
-    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type II", SMALL_TEXT));
-
-    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack2, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay2, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain2, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease2, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPwmLFORateHz2, sync);
-        pGraphics->HideControl(kParamPwmLFORateTempo2, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth2, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape2, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow2, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset2, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), TypeParam(t, kParamPitchAttack1), "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), TypeParam(t, kParamPitchDecay1), "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), TypeParam(t, kParamPitchSustain1), "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics->AttachControl(
+        new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), TypeParam(t, kParamPitchRelease1), "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
+      pGraphics
+        ->AttachControl(
+          new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), TypeParam(t, kParamPitchLFORateMode1), "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
+          kNoTag, "LFO");
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), TypeParam(t, kParamPitchLFORateTempo1), "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
+        ->DisablePrompt(false);
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), TypeParam(t, kParamPitchLFORateHz1), "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(new IVKnobControl(
+        IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), TypeParam(t, kParamPitchLFODepth1), "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics
+        ->AttachControl(new IVKnobControl(
+          IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), TypeParam(t, kParamPitchLFOShape1), "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
+        ->DisablePrompt(false);
+      pGraphics->AttachControl(new IVKnobControl(
+        IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), TypeParam(t, kParamPitchKeyTrack1), "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(
+        new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), TypeParam(t, kParamPitchModPow1), "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(
+        new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), TypeParam(t, kParamPitchOffset1), "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
 
 
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack2, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay2, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain2, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease2, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode2, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPitchLFORateHz2, sync);
-        pGraphics->HideControl(kParamPitchLFORateTempo2, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz2, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth2, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape2, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack2, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow2, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset2, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+      pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), TypeParam(t, kParamExtraUnison1), nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
+      pGraphics->AttachControl(new IVKnobControl(
+        IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), TypeParam(t, kParamExtraDetune1), "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    }
 
+    //////////////// VISUALISATION AND PLAYING SURFACE
+    // LFO displays next to each instrument row (PWM LFO on top, pitch LFO below)
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      const float vert = 330.0f - 110.0f * t;
+      pGraphics->AttachControl(new IVDisplayControl(IRECT(1140.0, 22.0f + vert, 1290.0, 70.0f + vert), "PWM LFO", SMALLER_LABEL, EDirection::Horizontal, -1.f, 1.f, 0.f, 256), kCtrlTagLFOVisFirst + 2 * t);
+      pGraphics->AttachControl(new IVDisplayControl(IRECT(1140.0, 72.0f + vert, 1290.0, 120.0f + vert), "Pitch LFO", SMALLER_LABEL, EDirection::Horizontal, -1.f, 1.f, 0.f, 256), kCtrlTagLFOVisFirst + 2 * t + 1);
+    }
 
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison2, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune2, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
+    pGraphics->AttachControl(new IVScopeControl<1>(IRECT(380.0, 470.0, 760.0, 600.0), "Output", SMALLER_LABEL), kCtrlTagScope);
+    pGraphics->AttachControl(new IVMeterControl<2>(IRECT(1235.0, 470.0, 1290.0, 600.0), "Level", SMALLER_LABEL), kCtrlTagMeter);
 
-    //////////////// OSC 3
+    // pitch bend + mod wheel, keyboard (notes 0-3 = noise/sampler are below its range; use the drop box for the sampler)
+    pGraphics->AttachControl(new IWheelControl(IRECT(320.0, 610.0, 345.0, 695.0)), kCtrlTagBender);
+    pGraphics->AttachControl(new IWheelControl(IRECT(350.0, 610.0, 375.0, 695.0), IMidiMsg::EControlChangeMsg::kModWheel));
+    pGraphics->AttachControl(new IVKeyboardControl(IRECT(380.0, 610.0, 1290.0, 695.0), 36, 96), kCtrlTagKeyboard);
+    pGraphics->SetQwertyMidiKeyHandlerFunc([pGraphics](const IMidiMsg& msg) {
+      if (auto* pKeyboard = pGraphics->GetControlWithTag(kCtrlTagKeyboard))
+        pKeyboard->As<IVKeyboardControl>()->SetNoteFromMidi(msg.NoteNumber(), msg.StatusMsg() == IMidiMsg::kNoteOn);
+    });
 
-    vert -= 110;
-
-    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type III", SMALL_TEXT));
-
-    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack3, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay3, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain3, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease3, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPwmLFORateHz3, sync);
-        pGraphics->HideControl(kParamPwmLFORateTempo3, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth3, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape3, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow3, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset3, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack3, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay3, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain3, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease3, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode3, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPitchLFORateHz3, sync);
-        pGraphics->HideControl(kParamPitchLFORateTempo3, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz3, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth3, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape3, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack3, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow3, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset3, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison3, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune3, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-
-    //////////////// OSC 4
-
-    vert -= 110;
-
-    pGraphics->AttachControl(new ITextControl(IRECT(0.0, 25.0f + vert, 50.0, 125.0f + vert), "Type IV", SMALL_TEXT));
-
-    pGraphics->AttachControl(new IVGroupControl(IRECT(170.0, 20.0f + vert, 320.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(330.0, 20.0f + vert, 500.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(650.0, 20.0f + vert, 800.0, 120.0f + vert), "LFO", 10.0, SMALLER_LABEL));
-    pGraphics->AttachControl(new IVGroupControl(IRECT(810.0, 20.0f + vert, 980.0, 120.0f + vert), "Mods", 10.0, SMALLER_LABEL));
-
-    pGraphics->AttachControl(new IVSliderControl(IRECT(40.0, 35.0f + vert, 80.0, 120.0f + vert), kParamPwmAttack4, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(new IVSliderControl(IRECT(70.0, 35.0f + vert, 110.0, 120.0f + vert), kParamPwmDecay4, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(100.0, 35.0f + vert, 140.0, 120.0f + vert), kParamPwmSustain4, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(130.0, 35.0f + vert, 170.0, 120.0f + vert), kParamPwmRelease4, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(175.0, 60.0f + vert, 195.0, 90.0f + vert), kParamPwmLFORateMode4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPwmLFORateHz4, sync);
-        pGraphics->HideControl(kParamPwmLFORateTempo4, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateTempo4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(205.0, 35.0f + vert, 240.0, 115.0f + vert), kParamPwmLFORateHz4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(240.0, 35.0f + vert, 275.0, 115.0f + vert), kParamPwmLFODepth4, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(275.0, 35.0f + vert, 310.0, 115.0f + vert), kParamPwmLFOShape4, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(
-      new IVSlideSwitchControl(IRECT(340.0, 60.0f + vert, 360.0, 90.0f + vert), kParamPwmKeyTrack4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), true, EDirection::Vertical));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(390.0, 35.0f + vert, 435.0, 115.0f + vert), kParamPwmModPow4, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 67.5, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(445.0, 35.0f + vert, 490.0, 115.0f + vert), kParamPwmOffset4, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(520.0, 35.0f + vert, 560.0, 120.0f + vert), kParamPitchAttack4, "A", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(550.0, 35.0f + vert, 590.0, 120.0f + vert), kParamPitchDecay4, "D", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(580.0, 35.0f + vert, 620.0, 120.0f + vert), kParamPitchSustain4, "S", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics->AttachControl(
-      new IVSliderControl(IRECT(610.0, 35.0f + vert, 650.0, 120.0f + vert), kParamPitchRelease4, "R", SMALLER_LABEL, true, EDirection::Vertical, DEFAULT_GEARING, 5.0, 2.0, false));
-    pGraphics
-      ->AttachControl(
-        new IVSlideSwitchControl(IRECT(655.0, 55.0f + vert, 675.0, 85.0f + vert), kParamPitchLFORateMode4, "", DEFAULT_STYLE.WithShowValue(false).WithShowLabel(false), false, EDirection::Vertical),
-        kNoTag, "LFO")
-      ->SetAnimationEndActionFunction([pGraphics](const IControl* pControl) {
-        bool sync = pControl->GetValue() > 0.5;
-        pGraphics->HideControl(kParamPitchLFORateHz4, sync);
-        pGraphics->HideControl(kParamPitchLFORateTempo4, !sync);
-      });
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateTempo4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(685.0, 35.0f + vert, 720.0, 115.0f + vert), kParamPitchLFORateHz4, "Rate", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->Hide(true);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(720.0, 35.0f + vert, 755.0, 115.0f + vert), kParamPitchLFODepth4, "Depth", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics
-      ->AttachControl(new IVKnobControl(
-        IRECT(755.0, 35.0f + vert, 790.0, 115.0f + vert), kParamPitchLFOShape4, "Shape", SMALLER_LABEL, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0))
-      ->DisablePrompt(false);
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(815.0, 35.0f + vert, 860.0, 115.0f + vert), kParamPitchKeyTrack4, "Key Tr.", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(870.0, 35.0f + vert, 915.0, 115.0f + vert), kParamPitchModPow4, "Mod Pow", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-    pGraphics->AttachControl(
-      new IVKnobControl(IRECT(925.0, 35.0f + vert, 970.0, 115.0f + vert), kParamPitchOffset4, "Offset", SMALLER_LABEL, true, false, -135.0, 135.0, 0.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
-
-    pGraphics->AttachControl(new IVNumberBoxControl(IRECT(1000.0, 35.0f + vert, 1075.0, 85.0f + vert), kParamExtraUnison4, nullptr, "Unison", DEFAULT_STYLE, false, 1.0, 1.0, 8.0, "%0.0f", false));
-    pGraphics->AttachControl(new IVKnobControl(
-      IRECT(1075.0, 30.0f + vert, 1130.0, 95.0f + vert), kParamExtraDetune4, "Detune", DEFAULT_STYLE, true, false, -135.0, 135.0, -135.0, EDirection::Horizontal, DEFAULT_GEARING, 3.0));
-
- 
-// Your target viewport coordinates
-    IRECT scrollViewport = IRECT(600.0f, 500.0f, 1400.0f, 680.0f);
-    float totalVirtualHeight = 2000.0f;
-
-
-    // Style text alignment
-    IText adjustedTextSettings = SMALL_TEXT.WithVAlign(EVAlign::Top).WithAlign(EAlign::Near);
-
-    // Initialize your multiline text layout block inside the virtual area
-    IRECT initialVirtualBounds = IRECT(scrollViewport.L, scrollViewport.T, scrollViewport.R, scrollViewport.T + totalVirtualHeight);
-
-    mSampleListContainer = new IScrollContainer(scrollViewport, totalVirtualHeight);
-    pGraphics->AttachControl(mSampleListContainer);
-
-    mSampleListControl = new IMultiLineTextControl(initialVirtualBounds, "No samples loaded. Drop WAV files into the drop area to import.", adjustedTextSettings);
-    mSampleListContainer->AddChildControl(mSampleListControl);
-
-    UpdateSampleListBuffer();
-
-
-
-
-
-    IRECT dropBoxRect(25.0f, 500.0f, 550.0f, 680.0f);
+    IRECT dropBoxRect(25.0f, 500.0f, 300.0f, 650.0f);
 
     mDropBox = new DragDropWaveformDisplay(
       dropBoxRect,
-      // --- 1. THE DROP CALLBACK ---
+      // --- 1. THE DROP CALLBACK: into the first free slot ---
       [this](const char* filePath) {
-        if (!filePath)
-          return;
-
-        uint32_t targetSampleRate = (uint32_t)GetSampleRate();
-        ResampleAlgo resampleAlgo = ResampleAlgo::Lanczos;
-
-
-
-
-
-        int sampleIndex = ImportSampleAndPrintBits(filePath, targetSampleRate, resampleAlgo, AudioPipeline::CreateDefaultPipeline());
-        std::vector<int8_t> sampleData = mDSP.mSampleManager.GetDynamicSampleData(sampleIndex);
-        mDropBox->SetWaveformData(sampleData);
-
+        if (filePath)
+          ImportFile(filePath, -1);
       },
 
-      // --- 2. MOUSE DOWN (Note On) ---
-      [this]() {
-
-        IMidiMsg msg;
-        msg.MakeNoteOnMsg(3, mDSP.mSampleManager.DynamicCount(), 0); // DynamicCount is one up; but also, there is no velocity 0. so it is fine to operate that way and use the size directly
-        mDSP.ProcessMidiMsg(msg);
-        //SendMidiMsg(msg);
-      },
+      // --- 2. MOUSE DOWN (Note On): audition the selected (or last) sample ---
+      [this]() { SendAudition(true); },
 
       // --- 3. MOUSE UP (Note Off) ---
-      [this]() {
-        IMidiMsg msg;
-        msg.MakeNoteOffMsg(3, 0, 0);
-        mDSP.ProcessMidiMsg(msg);
-        //SendMidiMsg(msg);
-      });
+      [this]() { SendAudition(false); });
 
     pGraphics->AttachControl(mDropBox);
-    VAIA_ATTACH_BUILD_TAG(pGraphics);
+
+    // The sampler plays at a fixed speed unless this is on; then it follows pitch bend, the pitch envelope and the LFO
+    pGraphics->AttachControl(new IVToggleControl(IRECT(25.0, 655.0, 165.0, 695.0), kParamSamplerPitch, "Sampler pitch", SMALLER_LABEL, "OFF", "BENDS"));
+
+    // Switch for projects saved before the sound changes (it is on for them after loading, off for new instances)
+    pGraphics->AttachControl(
+      new IVToggleControl(IRECT(305.0, 500.0, 375.0, 560.0), [this](IControl* pCaller) { mDSP.mLegacyTiming = pCaller->GetValue() > 0.5; }, "Legacy timing", SMALLER_LABEL, "OFF", "ON"), kCtrlTagLegacyTiming);
+
+    //////////////// SAMPLES PAGE (a tab over the instrument rows; the keyboard below stays visible)
+    SamplesPanel::Callbacks cb;
+    cb.slotInfo = [this](int slot) { return SlotInfoFor(slot); };
+    cb.select = [this](int slot) { SelectSlot(slot); };
+    cb.audition = [this](bool down) { SendAudition(down); };
+    cb.clearSlot = [this]() { ClearSelectedSlot(); };
+    cb.revert = [this]() { RevertSelectedSlot(); };
+    cb.setEmbed = [this](bool embed) { SetEmbedSource(embed); };
+    cb.locate = [this](const std::string& path) { LocateSource(path); };
+    cb.dropFile = [this](const std::string& path) {
+      // a WAV dropped on the page goes into the selected slot if that is free, otherwise into the first free one
+      const int selected = mSamplesModel.Selected();
+      ImportFile(path, selected >= 0 && !mSamplesModel.HasSample() ? selected : -1);
+    };
+    mSamplesPanel = new SamplesPanel(IRECT(SamplesLayout::kPanel.l, SamplesLayout::kPanel.t, SamplesLayout::kPanel.r, SamplesLayout::kPanel.b), mSamplesModel, mPresets, std::move(cb));
+    pGraphics->AttachControl(mSamplesPanel, kCtrlTagSamplesPanel)->Hide(true);
+    pGraphics->AttachControl(
+      new IVToggleControl(IRECT(5.0, 0.0, 160.0, 24.0), [this](IControl* pCaller) { SetSamplesPageOpen(pCaller->GetValue() > 0.5); }, "", SMALLER_LABEL.WithShowLabel(false), "Samples", "Samples (open)"), kCtrlTagSamplesTab);
+
+    for (int t = 0; t < kNumTypes; ++t)
+      UpdateLfoRateVisibility(t);
+    SelectSlot(mSamplesModel.Selected()); // restore selection and waveform when the editor is reopened
+    VAIA_ATTACH_BUILD_TAG(pGraphics);     // dev builds only; call last so the label is on top
   };
 
 #endif
 }
 
-
-std::string VaiaOneBitPlus::GetTextualSampleDescription()
-{
-  std::string combined;
-  // Format each sample on its own block. Show mapped velocity, then path on same line,
-  // and pipeline string on the next indented line.
-  for (size_t i = 0; i < mSamplePaths.size(); ++i)
-  {
-    if (i)
-      combined += "\n";
-
-    // Velocity mapping: dynamic slot i maps to velocity = kPreparedCount + 1 + i
-    int vel = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + static_cast<int>(i);
-    combined += std::to_string(vel);
-    combined += ": ";
-    combined += mSamplePaths[i];
-    combined += "\n";
-
-    // pipeline line, indented
-    combined += "   ->";
-    if (i < mSamplePipelines.size() && !mSamplePipelines[i].empty())
-    {
-      combined += mSamplePipelines[i];
-    }
-    else
-    {
-      combined += "<no pipeline>";
-    }
-    combined += "\n";
-  }
-  return combined;
-}
-
-void VaiaOneBitPlus::UpdateSampleListBuffer()
-{
-  if (mSampleListContainer)
-  {
-    mSampleListContainer->UpdateChildText(GetTextualSampleDescription().c_str());
-    mSampleListContainer->SetDirty(true);
-  }
-
-}
-
 bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
 {
-  // Serialize parameters first (consistent with other plugins)
+  // Parameters first, then the versioned custom block (see src/StateFormat.h)
   bool ok = SerializeParams(chunk);
-
-  // Simple versioned binary block for dynamic samples
-  uint32_t version = 1;
-  chunk.Put(&version);
-
-  uint32_t numSlots = static_cast<uint32_t>(mDSP.mSampleManager.DynamicCount());
-  chunk.Put(&numSlots);
-
-  for (uint32_t i = 0; i < numSlots; ++i)
-  {
-    uint32_t sr = mDSP.mSampleManager.GetDynamicSampleRate(i);
-    auto data = mDSP.mSampleManager.GetDynamicSampleData(static_cast<int>(i));
-    uint32_t dataSize = static_cast<uint32_t>(data.size());
-
-    chunk.Put(&sr);
-    chunk.Put(&dataSize);
-    if (dataSize)
-      chunk.PutBytes(data.data(), static_cast<int>(dataSize));
-  }
-
-  // Persist file paths for UI using PutStr
-  uint32_t pathCount = static_cast<uint32_t>(mSamplePaths.size());
-  chunk.Put(&pathCount);
-  // For each sample persist path and the pipeline string (if any)
-  for (size_t i = 0; i < mSamplePaths.size(); ++i)
-  {
-    WDL_String s;
-    s.Set(mSamplePaths[i].c_str());
-    chunk.PutStr(s.Get());
-
-    WDL_String pl;
-    if (i < mSamplePipelines.size()) pl.Set(mSamplePipelines[i].c_str());
-    else pl.Set("\0");
-    chunk.PutStr(pl.Get());
-  }
-
+  const uint32_t compat = mDSP.mLegacyTiming.load() ? OneBitState::kCompatLegacyTiming : 0u;
+  OneBitState::Write(chunk, mDSP.mSampleManager.CopyDynamicSlots(), OneBitState::kLatestDspVersion, compat);
   return ok;
 }
 
 int VaiaOneBitPlus::UnserializeState(const IByteChunk& chunk, int startPos)
 {
-  // Restore parameters first
   int pos = UnserializeParams(chunk, startPos);
-
-  // Read version
-  uint32_t version = 0;
-  pos = chunk.Get(&version, pos);
-
-  if (version != 1)
-  {
+  if (pos < 0)
     return pos;
-  }
 
-  // Read dynamic samples
-  uint32_t numSlots = 0;
-  pos = chunk.Get(&numSlots, pos);
+  OneBitState::Data data;
+  pos = OneBitState::Read<WDL_String>(chunk, pos, data);
 
-  mDSP.mSampleManager.ClearDynamicSamples();
-  mSamplePaths.clear();
-  mSamplePipelines.clear();
+  // v0 (no block) and corrupt blocks both end up with no samples, as before
+  mDSP.mSampleManager.ReplaceDynamicSamples(std::move(data.slots));
+  ApplyMigrations(data);
 
-  for (uint32_t i = 0; i < numSlots; ++i)
-  {
-    uint32_t sr = 0;
-    pos = chunk.Get(&sr, pos);
-
-    uint32_t dataSize = 0;
-    pos = chunk.Get(&dataSize, pos);
-
-    std::vector<int8_t> data;
-    if (dataSize)
-    {
-      data.resize(dataSize);
-      pos = chunk.GetBytes(data.data(), static_cast<int>(dataSize), pos);
-    }
-
-    if (!data.empty())
-    {
-      mDSP.mSampleManager.AddSample(data.data(), data.size(), sr);
-    }
-  }
-
-  // Read persisted paths and pipelines
-  uint32_t pathCount = 0;
-  pos = chunk.Get(&pathCount, pos);
-  for (uint32_t i = 0; i < pathCount; ++i)
-  {
-    WDL_String ws;
-    pos = chunk.GetStr(ws, pos);
-    mSamplePaths.emplace_back(ws.Get());
-
-
-    WDL_String wpl;
-    pos = chunk.GetStr(wpl, pos);
-    mSamplePipelines.emplace_back(wpl.Get());
-
-  }
-
-  // Update the GUI text buffer
-  UpdateSampleListBuffer();
+  // may be called on any host thread: let OnIdle (main thread) refresh the drop box
+  mSamplesChanged.store(true);
 
   return pos;
+}
+
+void VaiaOneBitPlus::ResetParam(int paramIdx, double value)
+{
+  GetParam(paramIdx)->Set(value);
+  OnParamChange(paramIdx); // DSP; the editor is refreshed by the host's state restore
+}
+
+void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
+{
+  if (data.dspVersion < 2)
+  {
+    // Saved by the original behaviour: keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz speed).
+    // The user can switch this off in the editor.
+    mDSP.mLegacyTiming = true;
+
+    // The Release stages of both envelopes (and Pitch Keytrack) did nothing before (the voice was cut off at note-off), so whatever
+    // is stored in them was never heard. Reset them to 0, so the sound of the project stays the same now that
+    // release works. (A release of 0 ends within a few samples.)
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      ResetParam(TypeParam(t, kParamPwmRelease1));
+      ResetParam(TypeParam(t, kParamPitchRelease1));
+
+      // Pitch Keytrack did nothing before either: reset it, so that it doesn't start to change the pitch now.
+      ResetParam(TypeParam(t, kParamPitchKeyTrack1));
+    }
+  }
+  else
+  {
+    mDSP.mLegacyTiming = (data.compatFlags & OneBitState::kCompatLegacyTiming) != 0;
+  }
+
+  // The slot of Sampler Pitch used to be the retired "Input Dither" knob, which could hold any value. Before
+  // dspVersion 3 the sampler never followed pitch, so such projects must load with it off.
+  if (data.dspVersion < 3)
+    ResetParam(kParamSamplerPitch, 0.);
+}
+
+SamplesLayout::SlotInfo VaiaOneBitPlus::SlotInfoFor(int slot) const
+{
+  SamplesLayout::SlotInfo info;
+  const auto s = mDSP.mSampleManager.GetSlot(slot);
+  if (s && !s->Empty())
+  {
+    info.used = true;
+    info.name = SamplesLayout::BaseName(s->path);
+    info.bytes = s->data.size();
+  }
+  return info;
+}
+
+void VaiaOneBitPlus::SelectSlot(int slot)
+{
+  if (slot != mSamplesModel.Selected())
+    ++mSlotGeneration; // drop renders that are still running for the slot we are leaving
+
+  const auto s = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  std::error_code ec;
+  const bool fileExists = s && !s->path.empty() && std::filesystem::exists(std::filesystem::path(s->path), ec);
+  mSamplesModel.Select(slot, s, fileExists);
+
+  // what is stored can be shown without the source: the spectrogram and waveform of the 1-bit data
+  if (s && !s->Empty())
+    mSamplesModel.SetPreview(SamplesModel::MakePreview(s->data, {}, s->sampleRate));
+  RefreshDropBox();
+  if (mSamplesPanel)
+    mSamplesPanel->SetDirty(false);
+}
+
+void VaiaOneBitPlus::RefreshDropBox()
+{
+  // the drop box and the audition button follow the selected sample, or the last one if none is selected
+  int index = mSamplesModel.HasSample() ? mSamplesModel.Selected() : -1;
+  if (index < 0)
+    for (int i = static_cast<int>(mDSP.mSampleManager.DynamicCount()) - 1; i >= 0; --i)
+      if (const auto s = mDSP.mSampleManager.GetSlot(i); s && !s->Empty())
+      {
+        index = i;
+        break;
+      }
+
+  if (index < 0)
+  {
+    mPreviewVelocity = 0;
+    if (mDropBox)
+      mDropBox->SetWaveformData({});
+    return;
+  }
+  // dynamic slot i is played by velocity kPreparedCount + 1 + i (1:1 mapping, see SampleManager)
+  mPreviewVelocity = static_cast<int>(SampleData::SampleManager::kPreparedCount) + 1 + index;
+  if (mDropBox)
+    mDropBox->SetWaveformData(mDSP.mSampleManager.GetDynamicSampleData(index));
+}
+
+void VaiaOneBitPlus::SendAudition(bool down)
+{
+  if (mPreviewVelocity <= 0)
+    return;
+  IMidiMsg msg;
+  if (down)
+    msg.MakeNoteOnMsg(kSamplerNote, mPreviewVelocity, 0);
+  else
+    msg.MakeNoteOffMsg(kSamplerNote, 0, 0);
+  SendMidiMsgFromUI(msg); // UI -> DSP (SendMidiMsg would go to the host's MIDI out)
+}
+
+void VaiaOneBitPlus::SetSamplesPageOpen(bool open)
+{
+  IGraphics* pGraphics = GetUI();
+  if (!pGraphics)
+    return;
+  if (IControl* panel = pGraphics->GetControlWithTag(kCtrlTagSamplesPanel))
+    panel->Hide(!open);
+
+  // The meter, scope and LFO displays under the page are redrawn all the time: hide them while it covers them,
+  // or the page would be redrawn with them.
+  auto hide = [&](int tag) {
+    if (IControl* c = pGraphics->GetControlWithTag(tag))
+      c->Hide(open);
+  };
+  hide(kCtrlTagMeter);
+  hide(kCtrlTagScope);
+  for (int tag = kCtrlTagLFOVisFirst; tag <= kCtrlTagLFOVisLast; ++tag)
+    hide(tag);
+  pGraphics->SetAllControlsDirty();
+}
+
+void VaiaOneBitPlus::ClearSelectedSlot()
+{
+  const int slot = mSamplesModel.Selected();
+  if (slot < 0)
+    return;
+  ++mSlotGeneration;
+  mDSP.mSampleManager.ClearSlot(slot);
+  SelectSlot(slot);
+}
+
+void VaiaOneBitPlus::RevertSelectedSlot()
+{
+  const int slot = mSamplesModel.Selected();
+  const auto original = mSamplesModel.Original();
+  if (slot < 0 || !original)
+    return;
+  ++mSlotGeneration;
+  mDSP.mSampleManager.SetSlot(slot, *original);
+  SelectSlot(slot);
+}
+
+void VaiaOneBitPlus::SetEmbedSource(bool embed)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty())
+    return;
+
+  SampleData::Slot copy = *current;
+  copy.embedSource = embed;
+  mDSP.mSampleManager.SetSlot(slot, std::move(copy));
+  mSamplesModel.SetEmbed(embed);
+
+  // to embed the source it has to be in memory: render once (same chain, same result) to load it
+  if (embed && !current->source)
+    EnqueueRender(true);
+}
+
+void VaiaOneBitPlus::LocateSource(const std::string& path)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty() || !SampleRender::LoadSourceFile(path))
+  {
+    mSamplesModel.SetMessage("That file can't be read as a WAV.");
+    return;
+  }
+  SampleData::Slot copy = *current;
+  copy.path = path;
+  copy.source = nullptr; // read from the new file when needed
+  mDSP.mSampleManager.SetSlot(slot, std::move(copy));
+  SelectSlot(slot);
+  mSamplesModel.SetMessage("Source file found.");
+}
+
+// Render the selected slot again with the chain being edited (on the worker).
+void VaiaOneBitPlus::EnqueueRender(bool loadSourceOnly)
+{
+  const int slot = mSamplesModel.Selected();
+  const auto current = slot >= 0 ? mDSP.mSampleManager.GetSlot(slot) : nullptr;
+  if (!current || current->Empty())
+    return;
+
+  SampleJob job;
+  job.kind = SampleJob::Kind::Render;
+  job.slot = slot;
+  job.path = current->path;
+  job.source = current->source;
+  job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+  job.chain = mSamplesModel.Chain();
+  job.generation = mSlotGeneration.load();
+  (void)loadSourceOnly; // same job: loading the source is part of every render that doesn't have it yet
+  mSamplesModel.RenderStarted();
+  mImportWorker.Enqueue(std::move(job));
+}
+
+void VaiaOneBitPlus::HandleJobResults()
+{
+  for (auto& result : mImportWorker.TakeResults())
+  {
+    if (result.stale)
+      continue;
+    const bool isSelected = result.slot == mSamplesModel.Selected();
+    switch (result.kind)
+    {
+    case SampleJob::Kind::Import:
+      if (result.ok)
+      {
+        SelectSlot(result.slot);
+        mSamplesModel.SetPreview(std::move(result.preview));
+        mSamplesModel.SetMessage("Imported.");
+        if (mSamplesPanel)
+          mSamplesPanel->ScrollToSlot(result.slot);
+      }
+      else
+      {
+        mSamplesModel.SetMessage(result.error);
+      }
+      break;
+
+    case SampleJob::Kind::Render:
+      if (!isSelected)
+        break;
+      mSamplesModel.RenderFinished(result.ok ? "" : result.error);
+      if (result.ok)
+      {
+        mSamplesModel.SetPreview(std::move(result.preview));
+        mSamplesModel.SetStatus(SamplesModel::SourceStatus::InMemory);
+        RefreshDropBox();
+      }
+      else if (result.sourceMissing)
+      {
+        mSamplesModel.SetStatus(SamplesModel::SourceStatus::Missing);
+      }
+      break;
+
+    case SampleJob::Kind::AutoDc:
+      if (!isSelected)
+        break;
+      if (result.ok)
+      {
+        mSamplesModel.SetParam(result.dcStage, 0, result.dcOffset, SamplesPanel::NowMs()); // re-renders with it
+        char text[64];
+        std::snprintf(text, sizeof(text), "DC offset set to %.3f", result.dcOffset);
+        mSamplesModel.SetMessage(text);
+      }
+      else
+      {
+        mSamplesModel.SetMessage(result.error);
+      }
+      break;
+    }
+  }
+}
+
+void VaiaOneBitPlus::OnParamChangeUI(int paramIdx, EParamSource source)
+{
+  // Show either the Hz or the tempo-division rate knob, whatever changed the sync switch (UI, automation, state)
+  if (paramIdx >= kParamPwmAttack1 && paramIdx < TypeParam(kNumTypes, kParamPwmAttack1))
+  {
+    const int rel = (paramIdx - kParamPwmAttack1) % kParamsPerType + kParamPwmAttack1;
+    if (rel == kParamPwmLFORateMode1 || rel == kParamPitchLFORateMode1)
+      UpdateLfoRateVisibility((paramIdx - kParamPwmAttack1) / kParamsPerType);
+  }
+  Plugin::OnParamChangeUI(paramIdx, source);
+}
+
+void VaiaOneBitPlus::UpdateLfoRateVisibility(int type)
+{
+  IGraphics* pGraphics = GetUI();
+  if (!pGraphics)
+    return;
+  const bool pwmSync = GetParam(TypeParam(type, kParamPwmLFORateMode1))->Bool();
+  pGraphics->HideControl(TypeParam(type, kParamPwmLFORateHz1), pwmSync);
+  pGraphics->HideControl(TypeParam(type, kParamPwmLFORateTempo1), !pwmSync);
+  const bool pitchSync = GetParam(TypeParam(type, kParamPitchLFORateMode1))->Bool();
+  pGraphics->HideControl(TypeParam(type, kParamPitchLFORateHz1), pitchSync);
+  pGraphics->HideControl(TypeParam(type, kParamPitchLFORateTempo1), !pitchSync);
+}
+
+void VaiaOneBitPlus::OnUIClose()
+{
+  mDropBox = nullptr; // IGraphics deletes its controls when the editor closes
+  mSamplesPanel = nullptr;
+  Plugin::OnUIClose();
 }
 
 
@@ -849,10 +624,74 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   memset(outputs[0], 0, nFrames * sizeof(sample));
   memset(outputs[1], 0, nFrames * sizeof(sample));
 
-  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning);
+  const double tempo = mTimeInfo.mTempo > 0. ? mTimeInfo.mTempo : 120.; // hosts that report no tempo keep the old default
+  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, tempo);
+
+  // visualisation only (lock-free, no allocation)
+  mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
+  mScopeSender.ProcessBlock(outputs, nFrames, kCtrlTagScope, 1);
+  for (int t = 0; t < kNumTypes; ++t)
+  {
+    mLFOVisSender.PushData({kCtrlTagLFOVisFirst + 2 * t, {static_cast<float>(mDSP.mPwmLFOs[t].GetLastOutput())}});
+    mLFOVisSender.PushData({kCtrlTagLFOVisFirst + 2 * t + 1, {static_cast<float>(mDSP.mPitchLFOs[t].GetLastOutput())}});
+  }
 }
 
-void VaiaOneBitPlus::OnIdle() {}
+void VaiaOneBitPlus::OnIdle()
+{
+  // Main thread: pick up finished background renders
+  HandleJobResults();
+
+  // a state was loaded (host thread): the slots may all be different now
+  if (mSamplesChanged.exchange(false))
+    SelectSlot(mSamplesModel.Selected());
+
+  // start the background work the page asked for
+  if (mSamplesModel.Selected() >= 0)
+  {
+    const int dcStage = mSamplesModel.TakePendingAutoDc();
+    if (dcStage >= 0)
+    {
+      const auto current = mDSP.mSampleManager.GetSlot(mSamplesModel.Selected());
+      if (current && !current->Empty())
+      {
+        SampleJob job;
+        job.kind = SampleJob::Kind::AutoDc;
+        job.slot = mSamplesModel.Selected();
+        job.path = current->path;
+        job.source = current->source;
+        job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+        job.chain = mSamplesModel.Chain();
+        job.dcStage = static_cast<size_t>(dcStage);
+        mSamplesModel.SetMessage("Searching for the DC offset with the least DC...");
+        mImportWorker.Enqueue(std::move(job));
+      }
+    }
+    if (mSamplesModel.NeedsRender(SamplesPanel::NowMs()))
+      EnqueueRender(false);
+  }
+
+  // keep the legacy-timing switch in sync after a state load
+  if (IGraphics* pGraphics = GetUI())
+  {
+    if (IControl* pToggle = pGraphics->GetControlWithTag(kCtrlTagLegacyTiming))
+    {
+      const double value = mDSP.mLegacyTiming.load() ? 1.0 : 0.0;
+      if (pToggle->GetValue() != value)
+      {
+        pToggle->SetValue(value);
+        pToggle->SetDirty(false);
+      }
+    }
+  }
+
+  mMeterSender.TransmitData(*this);
+  mScopeSender.TransmitData(*this);
+  mLFOVisSender.TransmitData(*this);
+
+  // free sample banks the audio thread no longer uses (also happens on every edit)
+  mDSP.mSampleManager.CollectGarbage();
+}
 
 void VaiaOneBitPlus::OnReset()
 {
@@ -860,15 +699,12 @@ void VaiaOneBitPlus::OnReset()
 
   // 1. Reset DSP state and buffer allocations
   mDSP.Reset(currentSampleRate, GetBlockSize());
+  mMeterSender.Reset(currentSampleRate);
 
-  // 2. Only re-resample audio assets if the host SAMPLE RATE actually changed
-  if (currentSampleRate != mLastLoadedSampleRate)
-  {
-    ReloadSamples(currentSampleRate);
-    mLastLoadedSampleRate = currentSampleRate;
-  }
+  // Samples are kept on a sample-rate change: each one stores the rate it was rendered at.
+  // (They used to be cleared here, which lost every dropped or restored sample.)
 
-  // 3. Push parameter defaults/states to the DSP
+  // 2. Push parameter defaults/states to the DSP
   for (int p = 0; p < kNumParams; ++p)
   {
     mDSP.SetParam(p, GetParam(p)->Value());
@@ -879,7 +715,7 @@ void VaiaOneBitPlus::ProcessMidiMsg(const IMidiMsg& msg)
 {
   TRACE;
 
-  switch (int status = msg.StatusMsg())
+  switch (msg.StatusMsg())
   {
   case IMidiMsg::kNoteOn:
   case IMidiMsg::kNoteOff:
@@ -887,16 +723,13 @@ void VaiaOneBitPlus::ProcessMidiMsg(const IMidiMsg& msg)
   case IMidiMsg::kControlChange:
   case IMidiMsg::kProgramChange:
   case IMidiMsg::kChannelAftertouch:
-  case IMidiMsg::kPitchWheel: {
-    goto handle;
-  }
+  case IMidiMsg::kPitchWheel:
+    mDSP.ProcessMidiMsg(msg);
+    SendMidiMsg(msg); // MIDI thru
+    break;
   default:
-    return;
+    break;
   }
-
-handle:
-  mDSP.ProcessMidiMsg(msg);
-  SendMidiMsg(msg);
 }
 
 void VaiaOneBitPlus::OnParamChange(int paramIdx) { mDSP.SetParam(paramIdx, GetParam(paramIdx)->Value()); }
@@ -913,126 +746,29 @@ bool VaiaOneBitPlus::OnMessage(int msgTag, int ctrlTag, int dataSize, const void
 }
 
 
-int VaiaOneBitPlus::ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
+void VaiaOneBitPlus::ImportFile(const std::string& path, int slot)
 {
-  if (!filePath)
-    return -1;
-
-  SampleLoader loader;
-  LoadedSample rawWav = loader.load_file_static(filePath);
-  if (rawWav.sampleBuffer.empty())
-    return -1;
-
-  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
-
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
-
-  int idx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
-  if (idx >= 0)
-  {
-    // store path and pipeline for UI
-    mSamplePaths.emplace_back(filePath);
-    mSamplePipelines.emplace_back(pipeline.ToString());
-    UpdateSampleListBuffer();
-  }
-
-  return idx;
+  SampleJob job;
+  job.kind = SampleJob::Kind::Import;
+  job.slot = slot;
+  job.path = path;
+  job.sampleRate = std::max<uint32_t>(8000u, static_cast<uint32_t>(GetSampleRate()));
+  job.chain = PipelineModel::DefaultChain(); // the drop-box chain
+  mImportWorker.Enqueue(std::move(job));
 }
 
-
-int VaiaOneBitPlus::ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline)
+VaiaOneBitPlus::SampleJobResult VaiaOneBitPlus::RunJob(const SampleJob& job)
 {
-  if (!filePath)
-    return -1;
-
-  SampleLoader loader;
-  LoadedSample rawWav = loader.load_file_static(filePath);
-  if (rawWav.sampleBuffer.empty())
-    return -1;
-
-  auto resampled32 = SampleTools::Resample(rawWav.sampleBuffer, rawWav.header.SamplesPerSec, targetSampleRate, resampleAlgo);
-
-  auto packed1Bit = SampleTools::ReduceToOneBit(resampled32, targetSampleRate, pipeline);
-
-  int sampleIdx = mDSP.mSampleManager.AddSample(packed1Bit.data(), packed1Bit.size(), targetSampleRate);
-  if (sampleIdx >= 0)
-  {
-    mSamplePaths.emplace_back(filePath);
-    mSamplePipelines.emplace_back(pipeline.ToString());
-    UpdateSampleListBuffer();
-  }
-
-  PrintBits(filePath, packed1Bit);
-  return mDSP.mSampleManager.DynamicCount()-1;
+  return SampleJobs::Run(mDSP.mSampleManager, mSlotGeneration, job, [this](const std::string& path, const std::vector<int8_t>& bits) { PrintBits(path.c_str(), bits); });
 }
-
-
-
 
 std::string VaiaOneBitPlus::PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit)
 {
-  // --- Generate C++ array definition ---
-  std::string path(filePath);
-  size_t lastSlash = path.find_last_of("/\\");
-  std::string varName = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
-
-  // Remove extension (everything from the last dot onwards)
-  size_t lastDot = varName.find_last_of('.');
-  if (lastDot != std::string::npos)
-  {
-    varName = varName.substr(0, lastDot);
-  }
-
-  // Sanitize non-alphanumeric characters (e.g., spaces, hyphens) into underscores
-  for (char& c : varName)
-  {
-    if (!std::isalnum(static_cast<unsigned char>(c)))
-    {
-      c = '_';
-    }
-  }
-
-  // C++ variable names cannot start with a digit (e.g. "808Snare" -> "s_808Snare")
-  if (!varName.empty() && std::isdigit(static_cast<unsigned char>(varName[0])))
-  {
-    varName = "s_" + varName;
-  }
-  else if (varName.empty())
-  {
-    varName = "kSample";
-  }
-
-  // Build the array code string
-  std::string code = "inline constexpr int8_t " + varName + "[] = {";
-  for (size_t i = 0; i < packed1Bit.size(); ++i)
-  {
-    char hexBuf[16];
-    // Cast to uint8_t prevents sign-extension printing issues
-    std::snprintf(hexBuf, sizeof(hexBuf), "0x%02X", static_cast<uint8_t>(packed1Bit[i]));
-    code += hexBuf;
-    if (i + 1 < packed1Bit.size())
-    {
-      code += ", ";
-    }
-  }
-  code += "};";
-
-  MY_PRINTF("%s\n", code.c_str());
+  std::string code = SampleTools::ToCppArray(filePath ? filePath : "", packed1Bit);
+  DebugPrintLong(code);
   return code;
 }
 
 
-void VaiaOneBitPlus::ReloadSamples(uint32_t targetSampleRate)
-{
-  // Clear existing samples in DSP manager
-  mDSP.mSampleManager.ClearDynamicSamples();
-  // Also clear recorded paths when reloading base factory samples
-  mSamplePaths.clear();
-  mSamplePipelines.clear();
-  //if (!mSamplePathsBuffer.empty()) mSamplePathsBuffer[0] = '\0';
-
-
-  UpdateSampleListBuffer();
-}
 
 #endif

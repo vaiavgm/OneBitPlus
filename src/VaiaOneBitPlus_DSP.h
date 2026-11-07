@@ -1,6 +1,9 @@
 #pragma once
 
 
+#include <atomic>
+#include <memory>
+#include <cmath>
 #include <IPlugLogger.h>
 #include <IPlugMidi.h>
 
@@ -21,7 +24,7 @@
 
 #include "SampleData.h"
 #include "SampleOscillator.h"
-#include "VaiaOneBitPlus.h"
+#include "src/Params.h"
 #include "VaiaOscillator.h"
 
 #include <algorithm>
@@ -48,7 +51,8 @@ enum EModulations
   kModPwmSustainSmoother3,
   kModPwmSustainSmoother4,
 
-  kModPitchLFO1,
+  kNumSmoothedModulations, // lanes before this are smoothed parameters, lanes after it are LFOs
+  kModPitchLFO1 = kNumSmoothedModulations,
   kModPitchLFO2,
   kModPitchLFO3,
   kModPitchLFO4,
@@ -129,15 +133,16 @@ public:
 
     // Type 1
     std::array<VaiaOscillator<T>, mNumOscPerVoice> mUnisonOsc{}; // up to 8 unisons
+    std::array<double, mNumOscPerVoice> mDetuneRatios{};          // see UpdateDetuneRatios
     ADSREnvelope<T> mPwmEnv{};
     ADSREnvelope<T> mPitchEnv{};
 
 
     // sample osc
     SampleOscillator<T> mSampleOsc{};
+    // generation of the SampleManager bank mSampleOsc points into (0 = static data)
+    uint64_t mBankGeneration = 0;
 
-    // lightweight debug counter to rate-limit logging inside the voice
-    int mDebugSampleCounter = 0;
 
 
     bool pwmKeyTrack;
@@ -154,7 +159,6 @@ public:
 
 
     OSC_Algorithm algo = used_algo;
-    WDL_TypedBuf<float> mTimbreBuffer;
     double mModWheel{0.0};
 
 
@@ -246,12 +250,15 @@ public:
         extraDetuneCents = preset.extraDetuneCents;
       }
 
-      // MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
+      MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
 
 
       mSampleOsc.Reset();
       auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
-      mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size);
+      // The sample is rendered at the host rate it was imported with and plays at that rate. Legacy projects keep
+      // the original behaviour: the rate was never passed on, so every sample played as if it was 44.1 kHz.
+      mSampleOsc.BindSample(sampleInfo.data, sampleInfo.size, mParentDSP.mLegacyTiming.load(std::memory_order_relaxed) ? 44100u : sampleInfo.sampleRate);
+      mBankGeneration = sampleInfo.bankGeneration; // keeps the sample bank alive while this voice plays
 
       if (isRetrigger)
       {
@@ -317,8 +324,8 @@ public:
     {
       if (sampleOsc && algo == OSC_Algorithm::ALGO_PIN_PULSE)
       {
-        // SampleOscillator already returns 1.0 or -1.0 natively
-        T sampleVal = sampleOsc->Process(440); // assume native A
+        // SampleOscillator returns 1.0 or 0.0. At 440 Hz a sample plays at its recorded speed.
+        T sampleVal = sampleOsc->Process(oscFreq);
 
         T outputVal = outputs[0][i];
 
@@ -330,14 +337,24 @@ public:
       }
     }
 
-    inline void ProcessStandardOscillators(T** outputs, int i, double oscFreq, double pwmFunc, double velocity, int unison, double detuneRange)
+    // Frequency ratio of each unison oscillator (same formula as before, computed once per block instead of
+    // once per sample per oscillator).
+    void UpdateDetuneRatios(int unison, double detuneRange)
+    {
+      for (int u = 0; u < unison; ++u)
+      {
+        double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
+        mDetuneRatios[u] = pow(2.0, offsetCents / 1200.0);
+      }
+    }
+
+    inline void ProcessStandardOscillators(T** outputs, int i, double oscFreq, double pwmFunc, int unison)
     {
       bool anyHigh = false;
 
       for (int u = 0; u < unison; ++u)
       {
-        double offsetCents = (unison == 1) ? 0.0 : (-detuneRange * 0.5 + (detuneRange * static_cast<double>(u)) / static_cast<double>(unison - 1));
-        double freq = oscFreq * pow(2.0, offsetCents / 1200.0);
+        double freq = oscFreq * mDetuneRatios[u];
 
         auto& unisonOsc = mUnisonOsc[u];
         unisonOsc.SetPWM(pwmFunc);
@@ -367,21 +384,14 @@ public:
 
       double midiNote = (pitch * 12.0) + 69.1;
 
-      mInputs[kVoiceControlTimbre].Write(mTimbreBuffer.Get(), startIdx, nFrames);
 
 
-      int velInt = static_cast<int>(std::round(velocity));
 
-      // rate-limit debug printing to once every 1024 samples per voice
-      /*
-      if ((++mDebugSampleCounter % 1024) == 0)
-      {
-        MY_PRINTF("ProcessSamplesAccumulating: this=%p mOscId=%zu derivedVel=%.1f midiNote=%.2f\n", (void*)this, mOscId, velocity, midiNote);
-      }
-      */
 
-      int unison = std::clamp(extraUnisonCount, 1, 8);
-      double detuneRange = extraDetuneCents;
+      int unison = std::clamp(extraUnisonCount, 1, static_cast<int>(mNumOscPerVoice));
+      UpdateDetuneRatios(unison, extraDetuneCents);
+
+      const bool samplerPitch = mParentDSP.mSamplerPitch.load(std::memory_order_relaxed);
 
       double tempNoise4 = 0.0;
       double tempNoise8 = 0.0;
@@ -393,44 +403,47 @@ public:
         auto pitchEnvVal = mPitchEnv.Process(inputs[kModPitchSustainSmoother1 + mOscId][i]) * pitchModStrength + pitchOffsetStrength;
         auto pwmEnvVal = (mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + mOscId][i]) + mModWheel + inputs[kModPwmLFO1 + mOscId][i]) * pwmModStrength + pwmOffsetStrength;
 
-        double oscFreq = 440.0 * pow(2.0, pitch + pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal);
+        // Pitch Keytrack: extra octaves per octave of distance from A440 (0 = off, 1 = every interval doubled,
+        // -1 = every key plays A440). It was stored but never used before.
+        const double keyTrackOctaves = pitchKeyTrackStrength * pitch;
+
+        double oscFreq = 440.0 * pow(2.0, pitch + pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal + keyTrackOctaves);
         double pwmFunc = pwmKeyTrack ? (pwmEnvVal * (oscFreq / 440.0f)) : pwmEnvVal;
 
-        /*
-       if (++mDebugSampleCounter % 1024 == 0)
-        {
-         double envVal = mPwmEnv.Process(inputs[kModPwmSustainSmoother1 + mOscId][i]);
-          double lfoVal = inputs[kModPwmLFO1 + mOscId][i];
-          double modWheelVal = mModWheel;
- double
-       modPow = pwmModStrength;
-          double offsetVal = pwmOffsetStrength;
-          MY_PRINTF("LFO debug: env=%.6f lfo=%.6f modWheel=%.6f modPow=%.6f offset=%.6f\n", envVal, lfoVal, modWheelVal,
-       modPow, offsetVal);
-        }
-        */
+
 
         double noiseThreshold = velocity * (1.0 - mModWheel);
 
-        if (midiNote < 1 && velocity > 0.0)
+        // Notes 0-2 are noise and note 3 is the sampler: all of them stop as soon as the key is released.
+        // Synth notes keep sounding while an envelope is still in its release stage.
+        if (midiNote < 1)
         {
-          ProcessNoise1(outputs, i, noiseThreshold);
+          if (velocity > 0.0)
+            ProcessNoise1(outputs, i, noiseThreshold);
         }
-        else if (midiNote < 2 && velocity > 0.0)
+        else if (midiNote < 2)
         {
-          ProcessNoise2(outputs, i, noiseThreshold, lastClock4, tempNoise4);
+          if (velocity > 0.0)
+            ProcessNoise2(outputs, i, noiseThreshold, lastClock4, tempNoise4);
         }
-        else if (midiNote < 3 && velocity > 0.0)
+        else if (midiNote < 3)
         {
-          ProcessNoise3(outputs, i, noiseThreshold, lastClock8, tempNoise8);
+          if (velocity > 0.0)
+            ProcessNoise3(outputs, i, noiseThreshold, lastClock8, tempNoise8);
         }
-        else if (midiNote < 4 && velocity > 0.0)
+        else if (midiNote < 4)
         {
-          ProcessSampleOscillator(outputs, i, oscFreq, &mSampleOsc);
+          if (velocity > 0.0)
+          {
+            // Sampler Pitch on: the sample is sped up / slowed down by pitch bend, the pitch envelope and the pitch LFO
+            // (not by the key itself: the sampler note is fixed, and keytrack would only detune it).
+            const double sampleFreq = samplerPitch ? 440.0 * pow(2.0, pitchBend + inputs[kModPitchLFO1 + mOscId][i] + pitchEnvVal) : 440.0;
+            ProcessSampleOscillator(outputs, i, sampleFreq, &mSampleOsc);
+          }
         }
-        else if (velocity > 0.0)
+        else if (velocity > 0.0 || mPwmEnv.GetBusy() || mPitchEnv.GetBusy())
         {
-          ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, velocity, unison, detuneRange);
+          ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, unison);
         }
       }
     }
@@ -446,7 +459,6 @@ public:
       mPitchEnv.SetSampleRate(sampleRate);
       mPwmEnv.SetSampleRate(sampleRate);
 
-      mTimbreBuffer.Resize(blockSize);
     }
 
     // this is called by the VoiceAllocator to set generic control values.
@@ -479,53 +491,34 @@ public:
     }
   }
 
-  void CentralizeLFO(T* pToCentralize, int nFrames, T levelScalar)
-  {
-    // Center the LFO buffer to have zero mean
-    if (nFrames <= 0)
-      return;
-    T sum = (T)0;
-    for (int s = 0; s < nFrames; ++s)
-    {
-      sum += pToCentralize[s];
-    }
-    T mean = sum / static_cast<T>(nFrames);
-    if (mean != (T)0)
-    {
-      for (int s = 0; s < nFrames; ++s)
-      {
-        pToCentralize[s] -= mean;
-      }
-    }
-  }
-
-
   void ProcessBlock(T** inputs, T** outputs, int nOutputs, int nFrames, double qnPos = 0., bool transportIsRunning = false, double tempo = 120.)
   {
+    const bool legacyTiming = mLegacyTiming.load(std::memory_order_relaxed);
+
+    // Legacy projects: synced LFOs ran at a fixed 120 BPM (the plugin never passed the host tempo on)
+    if (legacyTiming)
+      tempo = 120.;
+
+    // The parameter smoothers (gain, sustain levels) always used iPlug2's default coefficients (for 48 kHz), so
+    // they were right at 48 kHz only. Now they follow the sample rate, except in legacy mode. Updated here, on the
+    // audio thread, because the smoother is read here.
+    if (legacyTiming != mSmootherIsLegacy)
+    {
+      mParamSmoother.SetSmoothTime(kSmoothTimeMs, legacyTiming ? DEFAULT_SAMPLE_RATE : mSampleRate);
+      mSmootherIsLegacy = legacyTiming;
+    }
+
 
 
     mParamSmoother.ProcessBlock(mParamsToSmooth.data(), mModulations.GetList(), nFrames);
-    mPitchLFO1.ProcessBlock(mModulations.GetList()[kModPitchLFO1], nFrames, qnPos, transportIsRunning, tempo);
-    mPwmLFO1.ProcessBlock(mModulations.GetList()[kModPwmLFO1], nFrames, qnPos, transportIsRunning, tempo);
-    // CentralizeLFO(mModulations.GetList()[kModPitchLFO1], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-    // CentralizeLFO(mModulations.GetList()[kModPwmLFO1], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-
-    mPitchLFO2.ProcessBlock(mModulations.GetList()[kModPitchLFO2], nFrames, qnPos, transportIsRunning, tempo);
-    mPwmLFO2.ProcessBlock(mModulations.GetList()[kModPwmLFO2], nFrames, qnPos, transportIsRunning, tempo);
-    // CentralizeLFO(mModulations.GetList()[kModPitchLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-    // CentralizeLFO(mModulations.GetList()[kModPwmLFO2], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-
-    mPitchLFO3.ProcessBlock(mModulations.GetList()[kModPitchLFO3], nFrames, qnPos, transportIsRunning, tempo);
-    mPwmLFO3.ProcessBlock(mModulations.GetList()[kModPwmLFO3], nFrames, qnPos, transportIsRunning, tempo);
-    // CentralizeLFO(mModulations.GetList()[kModPitchLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-    // CentralizeLFO(mModulations.GetList()[kModPwmLFO3], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-
-    mPitchLFO4.ProcessBlock(mModulations.GetList()[kModPitchLFO4], nFrames, qnPos, transportIsRunning, tempo);
-    mPwmLFO4.ProcessBlock(mModulations.GetList()[kModPwmLFO4], nFrames, qnPos, transportIsRunning, tempo);
-    // CentralizeLFO(mModulations.GetList()[kModPitchLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
-    // CentralizeLFO(mModulations.GetList()[kModPwmLFO4], nFrames, LFO<T>::GetQNScalar(LFO<T>::k1));
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      mPitchLFOs[t].ProcessBlock(mModulations.GetList()[kModPitchLFO1 + t], nFrames, qnPos, transportIsRunning, tempo);
+      mPwmLFOs[t].ProcessBlock(mModulations.GetList()[kModPwmLFO1 + t], nFrames, qnPos, transportIsRunning, tempo);
+    }
 
     mSynth.ProcessBlock(mModulations.GetList(), outputs, 2, nOutputs, nFrames);
+    ReportSampleBankUsage();
 
     double eps = 0.001;
 
@@ -552,25 +545,57 @@ public:
           outputs[1][s] = 1.0 * smoothedGain;
         }
       }
+      break;
+    default:
+      break;
+    }
+
+    // The voices only ever output 0 or +gain, so the signal sits on a large DC offset. Remove it with a one-pole
+    // high-pass (10 Hz): y[n] = x[n] - x[n-1] + R * y[n-1]. The audible (AC) part is unchanged. The output is
+    // mono (both channels are equal), so one filter is enough.
+    if (mDcBlockerEnabled.load(std::memory_order_relaxed))
+    {
+      for (int s = 0; s < nFrames; s++)
+      {
+        const T x = outputs[0][s];
+        T y = x - mDcX1 + mDcR * mDcY1;
+        if (std::abs(y) < static_cast<T>(1e-9))
+          y = 0; // below -180 dB: true silence, and no denormals
+        mDcX1 = x;
+        mDcY1 = y;
+        outputs[0][s] = outputs[1][s] = y;
+      }
     }
   }
 
-  void Reset(double sampleRate, int blockSize)
+  // Tell the SampleManager which sample banks voices still read from, so replaced banks can be freed
+  // (off the audio thread). Lock-free: only atomic loads/stores and a loop over the voices.
+  void ReportSampleBankUsage()
   {
+    uint64_t oldest = mSampleManager.CurrentGeneration();
+    for (int v = 0; v < static_cast<int>(mSynth.NVoices()); ++v)
+    {
+      const auto* pVoice = static_cast<const Voice*>(mSynth.GetVoice(v));
+      if (pVoice->mBankGeneration != 0 && pVoice->GetBusy())
+        oldest = std::min(oldest, pVoice->mBankGeneration);
+    }
+    mSampleManager.ReportOldestGenerationInUse(oldest);
+  }
+
+  void Reset(double sampleRate, int blockSize)
+  {    mSampleRate = sampleRate;
+    mDcR = std::exp(-2.0 * 3.14159265358979323846 * kDcBlockerHz / sampleRate);
+    mDcX1 = mDcY1 = 0;
+    mSmootherIsLegacy = !mLegacyTiming.load(); // re-apply the smoothing time on the next block
+
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
     mSynth.Reset();
 
-    mPwmLFO1.SetSampleRate(sampleRate);
-    mPitchLFO1.SetSampleRate(sampleRate);
-
-    mPwmLFO2.SetSampleRate(sampleRate);
-    mPitchLFO2.SetSampleRate(sampleRate);
-
-    mPwmLFO3.SetSampleRate(sampleRate);
-    mPitchLFO3.SetSampleRate(sampleRate);
-
-    mPwmLFO4.SetSampleRate(sampleRate);
-    mPitchLFO4.SetSampleRate(sampleRate);
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      mPwmLFOs[t].SetSampleRate(sampleRate);
+      mPitchLFOs[t].SetSampleRate(sampleRate);
+    }
 
     mModulationsData.Resize(blockSize * kNumModulations);
     mModulations.Empty();
@@ -589,11 +614,10 @@ public:
   {
     using EEnvStage = ADSREnvelope<sample>::EStage;
 
-    // 1. Calculate block layout metrics at compile-time
-    constexpr int kParamsPerOsc = kParamPwmAttack2 - kParamPwmAttack1; // Exactly 26
+    // 1. Block layout (see Params.h)
+    constexpr int kParamsPerOsc = kParamsPerType;
     constexpr int kOscParamStart = kParamPwmAttack1;
-    constexpr int kNumOscs = 4;
-    constexpr int kOscParamEnd = kOscParamStart + (kNumOscs * kParamsPerOsc);
+    constexpr int kOscParamEnd = TypeParam(kNumTypes, kParamPwmAttack1);
 
     // 2. Check if the parameter belongs to any of the 4 oscillator blocks
     if (paramIdx >= kOscParamStart && paramIdx < kOscParamEnd)
@@ -608,25 +632,19 @@ public:
       const auto targetMode = static_cast<Voice::VoiceMode>(static_cast<int>(Voice::VoiceMode::kSynth1) + oscIndex);
 
       // Pointer lookups for LFOs & Smoother indices
-      LFO<T>* pwmLFOs[4] = {&mPwmLFO1, &mPwmLFO2, &mPwmLFO3, &mPwmLFO4};
-      LFO<T>* pitchLFOs[4] = {&mPitchLFO1, &mPitchLFO2, &mPitchLFO3, &mPitchLFO4};
+      auto& pwmLFOs = mPwmLFOs;
+      auto& pitchLFOs = mPitchLFOs;
 
       const int pwmSustainSmoothers[4] = {kModPwmSustainSmoother1, kModPwmSustainSmoother2, kModPwmSustainSmoother3, kModPwmSustainSmoother4};
       const int pitchSustainSmoothers[4] = {kModPitchSustainSmoother1, kModPitchSustainSmoother2, kModPitchSustainSmoother3, kModPitchSustainSmoother4};
 
       // Helper to apply parameter updates to all matching active voices
-      auto ApplyToVoice = [this, targetMode, oscIndex, relParamIdx, paramIdx, value](auto&& fn) {
+      auto ApplyToVoice = [this, targetMode](auto&& fn) {
         mSynth.ForEachVoice([&](SynthVoice& synthVoice) {
-          auto& voice = dynamic_cast<OneBitPlusDSP::Voice&>(synthVoice);
+          auto& voice = static_cast<OneBitPlusDSP::Voice&>(synthVoice); // all voices are Voice (see constructor)
           if (voice.mMode == targetMode)
           {
-            /*
-            // Rate-limit param-apply logs so UI changes don't flood output
-            if ((++mParamApplyLogCounter % 16) == 0)
-            {
-              MY_PRINTF("SetParam apply oscIndex=%d relParamIdx=%d paramIdx=%d value=%.4f to voice=%p mode=%d\n", oscIndex, relParamIdx, paramIdx, value, (void*)&voice, static_cast<int>(voice.mMode));
-            }
-            */
+
             fn(voice);
           }
         });
@@ -669,19 +687,19 @@ public:
 
       // --- PWM LFO ---
       case kParamPwmLFORateMode1:
-        pwmLFOs[oscIndex]->SetRateMode(value > 0.5);
+        pwmLFOs[oscIndex].SetRateMode(value > 0.5);
         break;
       case kParamPwmLFOShape1:
-        pwmLFOs[oscIndex]->SetShape(static_cast<int>(value));
+        pwmLFOs[oscIndex].SetShape(static_cast<int>(value));
         break;
       case kParamPwmLFORateHz1:
-        pwmLFOs[oscIndex]->SetFreqCPS(value);
+        pwmLFOs[oscIndex].SetFreqCPS(value);
         break;
       case kParamPwmLFORateTempo1:
-        pwmLFOs[oscIndex]->SetQNScalarFromDivision(static_cast<int>(value));
+        pwmLFOs[oscIndex].SetQNScalarFromDivision(static_cast<int>(value));
         break;
       case kParamPwmLFODepth1:
-        pwmLFOs[oscIndex]->SetScalar(value / 100.0);
+        pwmLFOs[oscIndex].SetScalar(value / 100.0);
         break;
 
       // --- PITCH ENVELOPE ---
@@ -718,19 +736,19 @@ public:
 
       // --- PITCH LFO ---
       case kParamPitchLFORateMode1:
-        pitchLFOs[oscIndex]->SetRateMode(value > 0.5);
+        pitchLFOs[oscIndex].SetRateMode(value > 0.5);
         break;
       case kParamPitchLFOShape1:
-        pitchLFOs[oscIndex]->SetShape(static_cast<int>(value));
+        pitchLFOs[oscIndex].SetShape(static_cast<int>(value));
         break;
       case kParamPitchLFORateHz1:
-        pitchLFOs[oscIndex]->SetFreqCPS(value);
+        pitchLFOs[oscIndex].SetFreqCPS(value);
         break;
       case kParamPitchLFORateTempo1:
-        pitchLFOs[oscIndex]->SetQNScalarFromDivision(static_cast<int>(value));
+        pitchLFOs[oscIndex].SetQNScalarFromDivision(static_cast<int>(value));
         break;
       case kParamPitchLFODepth1:
-        pitchLFOs[oscIndex]->SetScalar(value / 100.0);
+        pitchLFOs[oscIndex].SetScalar(value / 100.0);
         break;
 
       // --- UNISON & DETUNE ---
@@ -756,13 +774,8 @@ public:
     case kParamGain:
       mParamsToSmooth[kModGainSmoother] = (T)value / 100.;
       break;
-
-    case kInputProtect:
-      // not implemented
-      break;
-
-    case kInputDither:
-      // not implemented
+    case kParamSamplerPitch:
+      mSamplerPitch = value > 0.5;
       break;
     }
   }
@@ -771,21 +784,31 @@ public:
   public:
     OSC_Algorithm algo = used_algo;
 
+    // Keep behaviours of projects saved before the sound changes (see StateFormat.h, ECompat). Written by the
+    // UI / state thread, read by the audio thread.
+    std::atomic<bool> mLegacyTiming{false};
+
+    // Sampler Pitch (kParamSamplerPitch): the sampler follows pitch bend, the pitch envelope and the pitch LFO.
+    std::atomic<bool> mSamplerPitch{false};
+
+    // Output DC blocker. Only switched off by the render regression harness (tests/render) to compare with the
+    // original code.
+    std::atomic<bool> mDcBlockerEnabled{true};
+    static constexpr double kDcBlockerHz = 10.;
+    double mDcR = 0.9987; // set in Reset
+    T mDcX1 = 0, mDcY1 = 0;
+
+    static constexpr double kSmoothTimeMs = 5.; // LogParamSmooth's default
+    double mSampleRate = 44100.;
+    bool mSmootherIsLegacy = true; // the smoother starts with iPlug2's default coefficients (DEFAULT_SAMPLE_RATE)
+
     MidiSynth mSynth{VoiceAllocator::kPolyModePoly, MidiSynth::kDefaultBlockSize};
-    // int mParamApplyLogCounter = 0;
     WDL_TypedBuf<T> mModulationsData; // Sample data for global modulations (e.g. smoothed sustain)
     WDL_PtrList<T> mModulations;      // Ptrlist for global modulations
-    LogParamSmooth<T, kNumModulations> mParamSmoother;
+    // Only the gain and sustain lanes are smoothed; the LFO lanes are written by the LFOs.
+    LogParamSmooth<T, kNumSmoothedModulations> mParamSmoother;
     std::array<sample, kNumModulations> mParamsToSmooth{};
-    LFO<T> mPitchLFO1;
-    LFO<T> mPwmLFO1;
-
-    LFO<T> mPitchLFO2;
-    LFO<T> mPwmLFO2;
-
-    LFO<T> mPitchLFO3;
-    LFO<T> mPwmLFO3;
-
-    LFO<T> mPitchLFO4;
-    LFO<T> mPwmLFO4;
+    // one pitch and one PWM LFO per instrument type (free running, shared by all voices of that type)
+    std::array<LFO<T>, kNumTypes> mPitchLFOs;
+    std::array<LFO<T>, kNumTypes> mPwmLFOs;
   };

@@ -1,6 +1,10 @@
 #pragma once
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 #include "src/IAudioEffect.h"
@@ -127,66 +131,8 @@ inline static std::vector<int32_t> Resample(const std::vector<int32_t>& inputBuf
   return resampled;
 }
 
-inline static void Normalize(std::vector<int32_t>& buffer)
-{
-  if (buffer.empty())
-    return;
-
-  int32_t peak = 0;
-  for (int32_t val : buffer)
-  {
-    peak = std::max(peak, std::abs(val));
-  }
-  if (peak == 0 || peak == 2147483647)
-    return;
-
-  double scale = 2147483647.0 / static_cast<double>(peak);
-  for (int32_t& val : buffer)
-  {
-    double scaled = static_cast<double>(val) * scale;
-    val = static_cast<int32_t>(std::clamp(scaled, -2147483648.0, 2147483647.0));
-  }
-}
-
-// Helper: Boosts and soft-clips the signal to inject warmth/harmonics before 1-bit crushing
-inline static void Saturate(std::vector<int32_t>& buffer, double drive = 2.0)
-{
-  if (buffer.empty())
-    return;
-
-  for (int32_t& val : buffer)
-  {
-    double sample = (static_cast<double>(val) / 2147483648.0) * drive;
-    // Soft clipping via hyperbolic tangent (adds rich odd harmonics)
-    double saturated = std::tanh(sample);
-    val = static_cast<int32_t>(saturated * 2147483648.0);
-  }
-}
-
-// Helper: Single-pole Low-Pass Filter to remove high-frequency noise & harshness
-inline static void LowPassFilter(std::vector<int32_t>& buffer, double cutoffFreq, double sampleRate)
-{
-  if (buffer.empty() || cutoffFreq <= 0.0 || sampleRate <= 0.0)
-    return;
-
-  const double pi = 3.14159265358979323846;
-  double rc = 1.0 / (2.0 * pi * cutoffFreq);
-  double dt = 1.0 / sampleRate;
-  double alpha = dt / (rc + dt);
-
-  double prevOutput = static_cast<double>(buffer[0]) / 2147483648.0;
-
-  for (int32_t& val : buffer)
-  {
-    double input = static_cast<double>(val) / 2147483648.0;
-    prevOutput = prevOutput + alpha * (input - prevOutput);
-    val = static_cast<int32_t>(std::clamp(prevOutput * 2147483648.0, -2147483648.0, 2147483647.0));
-  }
-}
-
-
-
-inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline())
+// `preQuantizer`, if given, receives the signal after the effects and before the quantizer (for analysis / display).
+inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inputBuffer, uint32_t sampleRate, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline(), std::vector<double>* preQuantizer = nullptr)
 {
   if (inputBuffer.empty() || !pipeline.quantizer)
     return {};
@@ -207,6 +153,9 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
     }
   }
 
+  if (preQuantizer)
+    *preQuantizer = workingBuffer;
+
   // 3. Execute the single terminal quantizer stage
   std::vector<bool> bits = pipeline.quantizer->Quantize(workingBuffer, sampleRate);
 
@@ -226,5 +175,47 @@ inline static std::vector<int8_t> ReduceToOneBit(const std::vector<int32_t>& inp
   }
 
   return packedBytes;
+}
+// Turns a file path into a valid C++ identifier ("C:/x/808 Snare.wav" -> "s_808_Snare").
+inline std::string MakeCppIdentifier(const std::string& path)
+{
+  size_t lastSlash = path.find_last_of("/\\");
+  std::string name = (lastSlash == std::string::npos) ? path : path.substr(lastSlash + 1);
+
+  size_t lastDot = name.find_last_of('.');
+  if (lastDot != std::string::npos)
+    name = name.substr(0, lastDot);
+
+  for (char& c : name)
+  {
+    if (!std::isalnum(static_cast<unsigned char>(c)))
+      c = '_';
+  }
+
+  if (name.empty())
+    return "kSample";
+  if (std::isdigit(static_cast<unsigned char>(name[0])))
+    name = "s_" + name;
+  return name;
+}
+
+// Builds a C++ array definition for SampleData.h from packed 1-bit data.
+// Bytes >= 0x80 are written as int8_t(0x..) so the array compiles without narrowing errors on every compiler.
+inline std::string ToCppArray(const std::string& path, const std::vector<int8_t>& packed1Bit)
+{
+  std::string code = "inline constexpr int8_t " + MakeCppIdentifier(path) + "[] = {";
+  for (size_t i = 0; i < packed1Bit.size(); ++i)
+  {
+    if (i % 16 == 0)
+      code += "\n  ";
+    char hexBuf[24];
+    const auto byte = static_cast<uint8_t>(packed1Bit[i]);
+    std::snprintf(hexBuf, sizeof(hexBuf), byte >= 0x80 ? "int8_t(0x%02X)" : "0x%02X", byte);
+    code += hexBuf;
+    if (i + 1 < packed1Bit.size())
+      code += ", ";
+  }
+  code += "\n};";
+  return code;
 }
 }; // namespace SampleTools

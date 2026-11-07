@@ -2,7 +2,9 @@
 
 #include <vector>
 #include <algorithm>
-#include "src/IAudioEffect.h"
+#include <cstdio>
+#include <cstddef>
+#include <limits>
 #include "src/IQuantizer.h"
 #include "src/Debug.h"
 
@@ -56,94 +58,26 @@ inline static TrellisConfig SuggestTrellisConfig(size_t totalSamples,
   return {LOW_QUALITY_STATES, true, 4096};
 }
 
-inline static void ApplyTrellisQuantizationSinglePass(const std::vector<double>& input, std::vector<bool>& outputBits,
-                                                      int numStates = 129) // Boosted state count for higher precision
+// Flat [time][state] grid that is reused across chunks (one allocation instead of one vector per time step
+// per chunk). trellis[t][s] works like the former std::vector<std::vector<Node>>.
+template <class Node>
+class TrellisGrid
 {
-  if (input.empty())
-    return;
-
-  const size_t totalSamples = input.size();
-  const double state_min = -2.0;
-  const double state_max = 2.0;
-  const double infinity = std::numeric_limits<double>::max();
-
-  auto get_state_index = [&](double state) -> int {
-    double normalized = (state - state_min) / (state_max - state_min);
-    int idx = static_cast<int>(normalized * (numStates - 1));
-    return std::max(0, std::min(idx, numStates - 1));
-  };
-
-  struct Node
+public:
+  void Reset(size_t rows, int numStates, const Node& init)
   {
-    double cost;
-    double exact_error;
-    int prev_idx;
-    bool bit;
-  };
-
-  // Full-sample Trellis Grid: [Time Step][State Index]
-  std::vector<std::vector<Node>> trellis(totalSamples + 1, std::vector<Node>(numStates, {infinity, 0.0, -1, false}));
-
-  // Start at initial zero-error state
-  int start_idx = get_state_index(0.0);
-  trellis[0][start_idx] = {0.0, 0.0, -1, false};
-
-  // --- Forward Pass (Global Viterbi Search) ---
-  for (size_t t = 0; t < totalSamples; ++t)
-  {
-    double x = input[t];
-
-    for (int s = 0; s < numStates; ++s)
-    {
-      if (trellis[t][s].cost == infinity)
-        continue;
-
-      double current_err = trellis[t][s].exact_error;
-
-      // Evaluate 0 (-1.0) and 1 (+1.0)
-      for (int b = 0; b < 2; ++b)
-      {
-        bool bit_val = (b == 1);
-        double y = bit_val ? 1.0 : -1.0;
-
-        // 1st order noise shaping state feedback
-        double next_err = current_err + (x - y);
-
-        // Cost function: penalize low-frequency integrator energy
-        double step_cost = next_err * next_err;
-        double total_cost = trellis[t][s].cost + step_cost;
-
-        int next_s = get_state_index(next_err);
-
-        if (total_cost < trellis[t + 1][next_s].cost)
-        {
-          trellis[t + 1][next_s] = {total_cost, next_err, s, bit_val};
-        }
-      }
-    }
+    mNumStates = static_cast<size_t>(numStates);
+    const size_t needed = rows * mNumStates;
+    if (mNodes.size() < needed)
+      mNodes.resize(needed);
+    std::fill(mNodes.begin(), mNodes.begin() + static_cast<std::ptrdiff_t>(needed), init);
   }
+  Node* operator[](size_t t) { return mNodes.data() + t * mNumStates; }
 
-  // --- Traceback Pass ---
-  // Find absolute best end-state across the entire file
-  int best_state = 0;
-  double min_cost = infinity;
-  for (int s = 0; s < numStates; ++s)
-  {
-    if (trellis[totalSamples][s].cost < min_cost)
-    {
-      min_cost = trellis[totalSamples][s].cost;
-      best_state = s;
-    }
-  }
-
-  // Recover optimal 1-bit sequence from end to beginning
-  int curr_s = best_state;
-  for (size_t t = totalSamples; t > 0; --t)
-  {
-    outputBits[t - 1] = trellis[t][curr_s].bit;
-    curr_s = trellis[t][curr_s].prev_idx;
-  }
-}
+private:
+  std::vector<Node> mNodes;
+  size_t mNumStates = 0;
+};
 
 inline static void ApplyTrellisQuantizationChunked(const std::vector<double>& input, std::vector<bool>& outputBits, int numStates = 65, size_t chunkSize = 4096)
 {
@@ -172,13 +106,14 @@ inline static void ApplyTrellisQuantizationChunked(const std::vector<double>& in
 
   // Continuous error accumulator carried over across chunk boundaries
   double initial_error = 0.0;
+  TrellisGrid<Node> trellis;
 
   for (size_t offset = 0; offset < totalSamples; offset += chunkSize)
   {
     const size_t current_chunk = std::min(chunkSize, totalSamples - offset);
 
     // Grid size for current block: [Time step: 0..current_chunk][State Index: 0..numStates-1]
-    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, 0.0, -1, false}));
+    trellis.Reset(current_chunk + 1, numStates, {infinity, 0.0, -1, false});
 
     // Initialize time t = 0 for this chunk using error state from previous chunk
     int start_idx = get_state_index(initial_error);
@@ -246,102 +181,6 @@ inline static void ApplyTrellisQuantizationChunked(const std::vector<double>& in
 }
 
 // --- Helper for Trellis Quantization ---
-inline static void ApplyTrellisQuantization(const std::vector<double>& input, std::vector<bool>& outputBits, int numStates = 65)
-{
-  const double state_min = -2.0;
-  const double state_max = 2.0;
-  const double infinity = std::numeric_limits<double>::max();
-  const size_t chunk_size = 4096; // Process in blocks to prevent massive memory allocation
-
-  auto get_state_index = [&](double state) -> int {
-    double normalized = (state - state_min) / (state_max - state_min);
-    int idx = static_cast<int>(normalized * (numStates - 1));
-    return std::max(0, std::min(idx, numStates - 1));
-  };
-
-  struct Node
-  {
-    double cost;
-    double exact_error;
-    int prev_idx;
-    bool bit;
-  };
-
-  double initial_error = 0.0;
-
-  for (size_t offset = 0; offset < input.size(); offset += chunk_size)
-  {
-    size_t current_chunk = std::min(chunk_size, input.size() - offset);
-
-    // Trellis grid: [Time Step][State]
-    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, 0.0, -1, false}));
-
-    // Initialize first step of the chunk
-    int start_idx = get_state_index(initial_error);
-    trellis[0][start_idx] = {0.0, initial_error, -1, false};
-
-    // Forward Pass (Viterbi)
-    for (size_t t = 0; t < current_chunk; ++t)
-    {
-      double x = input[offset + t];
-
-      for (int s = 0; s < numStates; ++s)
-      {
-        if (trellis[t][s].cost == infinity)
-          continue;
-
-        double current_err = trellis[t][s].exact_error;
-
-        // Evaluate both 0 and 1 output possibilities
-        for (int b = 0; b < 2; ++b)
-        {
-          bool bit_val = (b == 1);
-          double y = bit_val ? 1.0 : -1.0;
-
-          // 1st order feedback: error accumulates
-          double next_err = current_err + (x - y);
-
-          // Cost function: To shape noise away from low frequencies, we minimize
-          // the magnitude of the integrator state (next_err) over time.
-          double step_cost = next_err * next_err;
-          double total_cost = trellis[t][s].cost + step_cost;
-
-          int next_s = get_state_index(next_err);
-
-          // Keep the path with the lowest cumulative cost
-          if (total_cost < trellis[t + 1][next_s].cost)
-          {
-            trellis[t + 1][next_s] = {total_cost, next_err, s, bit_val};
-          }
-        }
-      }
-    }
-
-    // Traceback setup: Find the best final state for this chunk
-    int best_state = 0;
-    double min_cost = infinity;
-    for (int s = 0; s < numStates; ++s)
-    {
-      if (trellis[current_chunk][s].cost < min_cost)
-      {
-        min_cost = trellis[current_chunk][s].cost;
-        best_state = s;
-      }
-    }
-
-    // Carry the exact continuous error state over to the next chunk's initial state
-    initial_error = trellis[current_chunk][best_state].exact_error;
-
-    // Traceback step: Work backwards to extract the optimal sequence of bits
-    int curr_s = best_state;
-    for (int t = current_chunk; t > 0; --t)
-    {
-      outputBits[offset + t - 1] = trellis[t][curr_s].bit;
-      curr_s = trellis[t][curr_s].prev_idx;
-    }
-  }
-}
-
 inline static void ApplyPsychoacousticTrellis(const std::vector<double>& input, std::vector<bool>& outputBits, int numStates = 65)
 {
   const double state_min = -3.0; // Widened slightly to account for filter gain amplification
@@ -372,11 +211,12 @@ inline static void ApplyPsychoacousticTrellis(const std::vector<double>& input, 
 
   // Seed history globally across chunk boundaries
   double g_e1 = 0.0, g_e2 = 0.0, g_e3 = 0.0;
+  TrellisGrid<Node> trellis;
 
   for (size_t offset = 0; offset < input.size(); offset += chunk_size)
   {
     size_t current_chunk = std::min(chunk_size, input.size() - offset);
-    std::vector<std::vector<Node>> trellis(current_chunk + 1, std::vector<Node>(numStates, {infinity, -1, false, 0.0, 0.0, 0.0}));
+    trellis.Reset(current_chunk + 1, numStates, {infinity, -1, false, 0.0, 0.0, 0.0});
 
     // Initialize with historical filters carried from the previous chunk
     int start_idx = get_state_index(g_e1);
@@ -464,9 +304,9 @@ public:
   {
   }
 
-  std::string ToString() const { char buf[128]; snprintf(buf, sizeof(buf), "TrellisQuantizer(maxRam=%zu)", m_maxRamBytes); return std::string(buf); }
+  std::string ToString() const override { char buf[128]; snprintf(buf, sizeof(buf), "TrellisQuantizer(maxRam=%zu)", m_maxRamBytes); return std::string(buf); }
 
-  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t sampleRate) override
+  std::vector<bool> Quantize(const std::vector<double>& input, [[maybe_unused]] uint32_t sampleRate) override
   {
     if (input.empty())
       return {};
@@ -480,7 +320,7 @@ public:
     constexpr size_t bytesPerNode = 24;
     size_t totalNodesAllocated = config.useChunking ? (config.chunkSize + 1) * config.numStates : (totalBits + 1) * config.numStates;
 
-    double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
+    [[maybe_unused]] double ramMB = static_cast<double>(totalNodesAllocated * bytesPerNode) / (1024.0 * 1024.0);
 
     MY_PRINTF("=== [Trellis Quantizer Debug] ===\n");
     MY_PRINTF("  Input Samples : %zu (%.2f sec)\n", totalBits, static_cast<double>(totalBits) / sampleRate);
@@ -501,10 +341,55 @@ public:
     }
     else
     {
-      // ApplyTrellisQuantizationSinglePass(input, outBits, config.numStates);
       ApplyPsychoacousticTrellis(input, outBits, config.numStates);
     }
 
+    return outBits;
+  }
+};
+
+// --- Trellis quantizers with an explicit algorithm (TrellisQuantizer above picks one by sample length) ---
+
+// 1st-order noise shaping (error integrator), processed in chunks of 4096 samples.
+class TrellisFirstOrderQuantizer : public IQuantizer
+{
+  int m_states;
+
+public:
+  explicit TrellisFirstOrderQuantizer(int states = 65)
+    : m_states(std::max(17, states | 1))
+  {
+  }
+
+  std::string ToString() const override { char buf[64]; snprintf(buf, sizeof(buf), "TrellisFirstOrder(states=%d)", m_states); return std::string(buf); }
+
+  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t /*sampleRate*/) override
+  {
+    std::vector<bool> outBits(input.size(), false);
+    if (!input.empty())
+      ApplyTrellisQuantizationChunked(input, outBits, m_states, 4096);
+    return outBits;
+  }
+};
+
+// 3rd-order "psychoacoustic" noise shaping, processed in chunks of 32 samples.
+class TrellisThirdOrderQuantizer : public IQuantizer
+{
+  int m_states;
+
+public:
+  explicit TrellisThirdOrderQuantizer(int states = 129)
+    : m_states(std::max(17, states | 1))
+  {
+  }
+
+  std::string ToString() const override { char buf[64]; snprintf(buf, sizeof(buf), "TrellisThirdOrder(states=%d)", m_states); return std::string(buf); }
+
+  std::vector<bool> Quantize(const std::vector<double>& input, uint32_t /*sampleRate*/) override
+  {
+    std::vector<bool> outBits(input.size(), false);
+    if (!input.empty())
+      ApplyPsychoacousticTrellis(input, outBits, m_states);
     return outBits;
   }
 };

@@ -1,5 +1,11 @@
 #pragma once
 
+#include "src/Params.h"
+
+#if IPLUG_DSP
+#include "VaiaOneBitPlus_DSP.h"
+#endif
+
 #include <IPlug_include_in_plug_hdr.h>
 #include <IPlugConstants.h>
 #include <IPlugMidi.h>
@@ -8,181 +14,18 @@
 #include "src/SampleTools.h" 
 #include "src/IAudioEffect.h" 
 #include "src/IQuantizer.h"
-#include "src/IScrollContainer.h"
+#include "src/SampleImportWorker.h"
+#include "src/StateFormat.h"
 #include "src/DragDropWaveformDisplay.h"
+#include "src/ChainPresets.h"
+#include "src/PipelineModel.h"
+#include "src/SampleJobs.h"
+#include "src/SampleRender.h"
+#include "src/SamplesModel.h"
+#include "src/SamplesPanel.h"
+#include <atomic>
+#include <filesystem>
 #include <string.h>
-
-const int kNumPresets = 1;
-
-enum EParams
-{
-  kParamGain = 0,
-  kParamNoteGlideTime,
-
-  // Type 1
-  kParamPwmAttack1,
-  kParamPwmDecay1,
-  kParamPwmSustain1,
-  kParamPwmRelease1,
-
-  kParamPwmLFORateMode1,
-  kParamPwmLFOShape1,
-  kParamPwmLFORateHz1,
-  kParamPwmLFORateTempo1,
-  kParamPwmLFODepth1,
-
-  kParamPwmKeyTrack1,
-  kParamPwmModPow1,
-  kParamPwmOffset1,
-
-  kParamPitchAttack1,
-  kParamPitchDecay1,
-  kParamPitchSustain1,
-  kParamPitchRelease1,
-
-  kParamPitchLFORateMode1,
-  kParamPitchLFOShape1,
-  kParamPitchLFORateHz1,
-  kParamPitchLFORateTempo1,
-  kParamPitchLFODepth1,
-
-  kParamPitchKeyTrack1,
-  kParamPitchModPow1,
-  kParamPitchOffset1,
-
-  kParamExtraUnison1,
-  kParamExtraDetune1,
-
-  // Type 2
-  kParamPwmAttack2,
-  kParamPwmDecay2,
-  kParamPwmSustain2,
-  kParamPwmRelease2,
-
-  kParamPwmLFORateMode2,
-  kParamPwmLFOShape2,
-  kParamPwmLFORateHz2,
-  kParamPwmLFORateTempo2,
-  kParamPwmLFODepth2,
-
-  kParamPwmKeyTrack2,
-  kParamPwmModPow2,
-  kParamPwmOffset2,
-
-  kParamPitchAttack2,
-  kParamPitchDecay2,
-  kParamPitchSustain2,
-  kParamPitchRelease2,
-
-  kParamPitchLFORateMode2,
-  kParamPitchLFOShape2,
-  kParamPitchLFORateHz2,
-  kParamPitchLFORateTempo2,
-  kParamPitchLFODepth2,
-
-  kParamPitchKeyTrack2,
-  kParamPitchModPow2,
-  kParamPitchOffset2,
-
-  kParamExtraUnison2,
-  kParamExtraDetune2,
-
-  // Type 3
-  kParamPwmAttack3,
-  kParamPwmDecay3,
-  kParamPwmSustain3,
-  kParamPwmRelease3,
-
-  kParamPwmLFORateMode3,
-  kParamPwmLFOShape3,
-  kParamPwmLFORateHz3,
-  kParamPwmLFORateTempo3,
-  kParamPwmLFODepth3,
-
-  kParamPwmKeyTrack3,
-  kParamPwmModPow3,
-  kParamPwmOffset3,
-
-  kParamPitchAttack3,
-  kParamPitchDecay3,
-  kParamPitchSustain3,
-  kParamPitchRelease3,
-
-  kParamPitchLFORateMode3,
-  kParamPitchLFOShape3,
-  kParamPitchLFORateHz3,
-  kParamPitchLFORateTempo3,
-  kParamPitchLFODepth3,
-
-  kParamPitchKeyTrack3,
-  kParamPitchModPow3,
-  kParamPitchOffset3,
-
-  kParamExtraUnison3,
-  kParamExtraDetune3,
-
-  // Type 4
-  kParamPwmAttack4,
-  kParamPwmDecay4,
-  kParamPwmSustain4,
-  kParamPwmRelease4,
-
-  kParamPwmLFORateMode4,
-  kParamPwmLFOShape4,
-  kParamPwmLFORateHz4,
-  kParamPwmLFORateTempo4,
-  kParamPwmLFODepth4,
-
-  kParamPwmKeyTrack4,
-  kParamPwmModPow4,
-  kParamPwmOffset4,
-
-  kParamPitchAttack4,
-  kParamPitchDecay4,
-  kParamPitchSustain4,
-  kParamPitchRelease4,
-
-  kParamPitchLFORateMode4,
-  kParamPitchLFOShape4,
-  kParamPitchLFORateHz4,
-  kParamPitchLFORateTempo4,
-  kParamPitchLFODepth4,
-
-  kParamPitchKeyTrack4,
-  kParamPitchModPow4,
-  kParamPitchOffset4,
-
-  kParamExtraUnison4,
-  kParamExtraDetune4,
-
-
-
-  // external signal modulation
-    kInputProtect,
-  kInputDither,
-
-  kNumParams
-};
-
-
-
-enum EControlTags
-{
-  kCtrlTagMeter = 0,
-  kCtrlTagLFOVis,
-  kCtrlTagScope,
-  kCtrlTagRTText,
-  kCtrlTagKeyboard,
-  kCtrlTagBender,
-  kCtrlTagOscilloscope,
-  kNumCtrlTags
-};
-
-
-#if IPLUG_DSP
-// OneBitPlus_DSP.h uses EParams, so it must come after the enum
-#include "VaiaOneBitPlus_DSP.h"
-#endif
 
 class VaiaOneBitPlus final : public Plugin
 {
@@ -200,30 +43,63 @@ public:
   int UnserializeState(const IByteChunk& chunk, int startPos) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
 
-  int ImportSample(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline());
-  int ImportSampleAndPrintBits(const char* filePath, uint32_t targetSampleRate, ResampleAlgo resampleAlgo, const AudioPipeline& pipeline = AudioPipeline::CreateDefaultPipeline());
+  // Imports a WAV file in the background with the default chain: into slot `slot`, or the first free one (-1).
+  // The result is picked up in OnIdle, which selects the new slot.
+  void ImportFile(const std::string& path, int slot = -1);
+  // Builds a C++ array definition of the packed sample (for SampleData.h) and writes it to the debugger output.
   std::string PrintBits(const char* filePath, const std::vector<int8_t>& packed1Bit);
 
-  void ReloadSamples(uint32_t targetSampleRate);
+  void OnUIClose() override;
+  void OnParamChangeUI(int paramIdx, EParamSource source) override;
+
   OneBitPlusDSP<sample> mDSP{ 32 };
+  // audio -> UI visualisation (lock-free queues, drained in OnIdle)
   IPeakSender<2> mMeterSender;
-  ISender<1> mLFOVisSender;
-  ISender<1> mOscilloscopeVisSender;
-  DragDropWaveformDisplay* mDropBox = nullptr;
+  ISender<1, 512> mLFOVisSender;   // one value per LFO per block, for 8 LFOs
+  IBufferSender<1> mScopeSender;   // L == R, so one channel is enough
+  DragDropWaveformDisplay* mDropBox = nullptr; // owned by IGraphics, nullptr while the editor is closed
 
-  // Keep file paths of imported samples for GUI display and persistence
-  std::vector<std::string> mSamplePaths;
-  // Persist the pipeline string used to process each sample
-  std::vector<std::string> mSamplePipelines;
-  // Backing buffer for the sample paths display (fixed capacity to avoid pointer invalidation)
-  std::vector<std::string> mSamplePathsBuffer;
-
-  IScrollContainer* mSampleListContainer = nullptr;
-  IMultiLineTextControl* mSampleListControl = nullptr;
+  // MIDI note that triggers the sampler (notes 0-2 are noise, see Voice::ProcessSamplesAccumulating)
+  static constexpr int kSamplerNote = 3;
+  // velocity used by the drop box to audition the most recently dropped sample (0 = nothing to audition)
+  int mPreviewVelocity = 0;
 
 private:
-  uint32_t mLastLoadedSampleRate = 0;
-  void UpdateSampleListBuffer();
-  std::string GetTextualSampleDescription();
+  // Work for the background thread (see SampleJobs.h)
+  using SampleJob = SampleJobs::Job;
+  using SampleJobResult = SampleJobs::Result;
+  SampleJobResult RunJob(const SampleJob& job);
+
+  // --- the Samples page (all on the main thread) ---
+  void SelectSlot(int slot);                 // select a slot in the model, show its preview
+  void RefreshDropBox();                     // waveform in the drop box + the velocity the audition plays
+  void SetSamplesPageOpen(bool open);
+  void SendAudition(bool down);
+  void ClearSelectedSlot();
+  void RevertSelectedSlot();
+  void SetEmbedSource(bool embed);
+  void LocateSource(const std::string& path);
+  void EnqueueRender(bool loadSourceOnly);
+  void HandleJobResults();
+  SamplesLayout::SlotInfo SlotInfoFor(int slot) const;
+
+  SamplesModel mSamplesModel;
+  ChainPresets::Store mPresets{std::filesystem::path()};
+  SamplesPanel* mSamplesPanel = nullptr; // owned by IGraphics, nullptr while the editor is closed
+  std::atomic<uint64_t> mSlotGeneration{0};
+
+  // Makes a loaded state sound like it did when it was saved (see StateFormat.h): converts parameters that
+  // changed meaning, and switches on the compatibility behaviours the old version had.
+  void ApplyMigrations(const OneBitState::Data& data);
+  // Sets a parameter to a value (used by migrations) and passes it on to the DSP.
+  void ResetParam(int paramIdx, double value = 0.);
+  // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.
+  void UpdateLfoRateVisibility(int type);
+
+  // Set when samples were replaced off the main thread (state load); OnIdle refreshes the drop box.
+  std::atomic<bool> mSamplesChanged{false};
+
+  // Declared last so it is destroyed (and its thread joined) before everything it uses.
+  SampleImportWorker<SampleJob, SampleJobResult> mImportWorker{[this](const SampleJob& job) { return RunJob(job); }};
 #endif
 };

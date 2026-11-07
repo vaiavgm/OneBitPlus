@@ -423,7 +423,40 @@
     <ClInclude Include="..\src\DragDropWaveformDisplay.h">
       <Filter>src\GUI</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\IScrollContainer.h">
+    <ClInclude Include="..\src\Params.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PipelinePresets.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleImportWorker.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\StateFormat.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\PipelineModel.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleRender.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SampleJobs.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\Spectrogram.h">
+      <Filter>src\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\ChainPresets.h">
+      <Filter>src\AudioEffects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SamplesModel.h">
+      <Filter>src\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SamplesLayout.h">
+      <Filter>src\GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\SamplesPanel.h">
       <Filter>src\GUI</Filter>
     </ClInclude>
     <ClInclude Include="..\src\BitCompression.h">
