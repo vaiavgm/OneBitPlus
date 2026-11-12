@@ -3,8 +3,10 @@
 // Definition (name, range, default) of every parameter. Used by the plugin constructor and by the tests, so that
 // the defaults a fresh instance starts with can be tested without a host.
 
+#include <cmath> // LFO.h (via iPlug2's Oscillator.h) uses std::sin and PI without including them
 #include <string>
 
+#include <IPlugConstants.h>
 #include <IPlugParameter.h>
 #include <LFO.h>
 

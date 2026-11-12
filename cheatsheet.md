@@ -50,5 +50,6 @@ REAPER must not have the plugin loaded while copying (close the FX window or REA
 ## If the build fails
 
 - "Cannot open include file" for VST3 or IGraphics headers: the iPlug2 dependencies are missing. They live in `E:\iPlug2\Dependencies` (see `E:\iPlug2\Dependencies\README.md`, and `E:\iPlug2\Dependencies\IPlug\README.md` for the SDKs such as `VST3_SDK`).
+- `Oscillator.h(68): error C2039: 'sin': is not a member of 'std'` / `PI` not found: iPlug2's `Oscillator.h` does not include `<cmath>` and `IPlugConstants.h`; newer MSVC libraries no longer include them implicitly. Fixed in `src\SampleOscillator.h`, `src\VaiaOscillator.h` and `src\ParamInit.h` by including them first (pull the latest).
 - "Platform toolset v145 not found": install the current Visual Studio C++ workload, or change `PlatformToolset` in the project files.
 - Anything in `src\SamplesPanel.h` or `src\VaiaOneBitPlus.cpp`: these were only compile-checked with clang on Linux so far. Send the first error lines.

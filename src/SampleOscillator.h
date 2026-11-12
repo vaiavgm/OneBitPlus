@@ -1,4 +1,8 @@
 #pragma once
+// iPlug2's Oscillator.h uses std::sin and PI without including what defines them: provide both first (newer MSVC
+// standard libraries no longer include <cmath> implicitly).
+#include <cmath>
+#include <IPlugConstants.h>
 #include "Oscillator.h"
 #include <algorithm>
 #include <cmath>
