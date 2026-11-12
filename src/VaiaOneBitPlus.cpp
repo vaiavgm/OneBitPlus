@@ -316,7 +316,7 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
   // The slots of Sampler Pitch and DC Filter used to be the retired "Input Dither" and "Input Protection" knobs, which could
   // hold any value. Version 0 never followed pitch in the sampler and had no DC filter, so those projects load with the
   // sampler pitch off and the DC filter on (the filter is part of the sound now).
-  if (data.dspVersion < 1 || data.resetNewParams)
+  if (data.dspVersion < 1)
   {
     ResetParam(kParamSamplerPitch, 0.);
     ResetParam(kParamDcFilter, 1.);

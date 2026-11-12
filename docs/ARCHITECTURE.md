@@ -13,7 +13,7 @@ OneBitPlus is a polyphonic 1-bit synth and sampler built on iPlug2. Every voice 
 | `VaiaOscillator.h` | Pulse/PWM oscillator (`IOscillator<T>`), ±1 output. |
 | `SampleOscillator.h` | Plays packed 1-bit sample data (MSB first), 0/1 output. |
 | `SampleData.h` | `SampleManager`: velocity-indexed sample slots (static prepared samples plus up to 127 dynamic ones) in immutable, atomically swapped banks. |
-| `StateFormat.h` | Versioned read/write of the custom state block (v0-v5, `dspVersion`). |
+| `StateFormat.h` | Versioned read/write of the custom state block (v0-v4, `dspVersion`). |
 | `SampleImportWorker.h` | Background thread for sample imports. |
 | `PipelinePresets.h` | The factory import pipelines as `AudioPipeline` objects (kept to prove the factory chains in `PipelineModel.h` build the same thing). |
 | `PipelineModel.h` | A **chain** (effects + one quantizer) as data: registry of stage types with parameter ranges, text format (also reads the old `AudioPipeline` text of existing projects), `Build()`, factory chains. |
@@ -83,10 +83,9 @@ The velocity at `Trigger()` picks one of 4 instrument presets: `mOscId = clamp((
 - **v1**: `u32 1, u32 n, n×{u32 sr, u32 size, bytes}, u32 m, m×{str path, str pipeline}`. Read-only.
 - **v2**: `u32 2, u32 dspVersion, u32 n, n×{u32 sr, u32 size, bytes, str path, str pipeline}`. Read-only.
 - **v3**: `u32 3, u32 dspVersion, u32 compatFlags, u32 n, n×{…as v2}`. Read-only.
-- **v4**: like v3, and each slot also has `u32 embedded [u32 sourceRate, u32 count, count×int16]`. A slot with no data is a free slot and is **kept**, so later samples keep their velocity (v1-v3 never had free slots). Read-only, from test builds.
-- **v5** (written now): the same layout as v4. It exists only because the numbering of `dspVersion` was restarted.
+- **v4** (written now): like v3, and each slot also has `u32 embedded [u32 sourceRate, u32 count, count×int16]`. A slot with no data is a free slot and is **kept**, so later samples keep their velocity (v1-v3 never had free slots).
 
-`dspVersion` is the sound-behaviour version the state was saved with: **0 = the original plugin** (before the clean-up; every state without a version), **1 = everything the clean-up added** (audible release, host tempo, samples at their own rate, pitch keytrack, DC filter, sampler pitch). A state older than 1 is migrated in `VaiaOneBitPlus::ApplyMigrations`: the DC Filter switch is set to on and Sampler Pitch to off (their slots were retired knobs), Release and Pitch Keytrack (which did nothing before) are reset to 0, and `kCompatLegacyTiming` is turned on, which keeps the original tempo (fixed 120 BPM), sample-playback and smoothing behaviour. `compatFlags` are saved with the project, and the "Legacy timing" switch in the editor changes them. Blocks v2-v4 from test builds used another numbering; `StateFormat.h` translates them. **When you change the sound on purpose again**, bump `kLatestDspVersion` to 2, add a migration step, and add the render hash for it. See [ANALYSIS.md](ANALYSIS.md#5-legacy-projects-and-migration-phase-6).
+`dspVersion` is the sound-behaviour version the state was saved with: **0 = the original plugin** (before the clean-up; every state without a version), **1 = everything the clean-up added** (audible release, host tempo, samples at their own rate, pitch keytrack, DC filter, sampler pitch). A state older than 1 is migrated in `VaiaOneBitPlus::ApplyMigrations`: the DC Filter switch is set to on and Sampler Pitch to off (their slots were retired knobs), Release and Pitch Keytrack (which did nothing before) are reset to 0, and `kCompatLegacyTiming` is turned on, which keeps the original tempo (fixed 120 BPM), sample-playback and smoothing behaviour. `compatFlags` are saved with the project, and the "Legacy timing" switch in the editor changes them. **When you change the sound on purpose again**, bump `kLatestDspVersion` to 2, add a migration step, and add the render hash for it. See [ANALYSIS.md](ANALYSIS.md#5-legacy-projects-and-migration-phase-6).
 
 ## Samples page (the "Samples" tab)
 

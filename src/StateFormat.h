@@ -21,8 +21,6 @@
 //                    [if embedded: u32 sourceRate, u32 sourceCount, sourceCount x int16]}
 //      A slot with size 0 is a free slot (a hole): it keeps the slots after it at their velocity. v1-v3 never
 //      had holes, so their reader drops empty slots as it always did.
-//  v5  the same layout as v4. It exists only because the numbering of dspVersion was restarted (see below): v2-v4 blocks
-//      were written by test builds with the old numbering and are translated when they are read.
 //
 // dspVersion describes the *sound behaviour* the state was saved with, independent of the container
 // layout. Loading a state with an older dspVersion lets the plugin migrate parameters so that existing
@@ -33,9 +31,6 @@
 //                pitch keytrack, DC-filtered output, the "DC Filter" switch and the "Sampler Pitch" switch (they reuse the
 //                retired Input Protection / Input Dither slots, so states before version 1 get them set to ON / off).
 //  Only bump this when the sound changes again on purpose.
-//
-//  Test builds of the clean-up (blocks v2-v4) counted 1 = original ... 4 = DC filter switch. Reading translates: 1 -> 0,
-//  2-4 -> 1 (2 and 3 also set `resetNewParams`, because the DC Filter / Sampler Pitch slots did not exist yet there).
 //
 // compatFlags are switches that keep a *behaviour* of an older version for as long as the user wants.
 // They are saved with the project (see ECompat).
@@ -51,7 +46,7 @@
 namespace OneBitState
 {
 
-constexpr uint32_t kLatestVersion = 5;
+constexpr uint32_t kLatestVersion = 4;
 
 // Sound-behaviour versions (see the comment at the top)
 constexpr uint32_t kDspVersionLegacy = 0;
@@ -77,7 +72,6 @@ struct Data
   uint32_t dspVersion = kDspVersionLegacy;    // sound-behaviour version the state was saved with
   uint32_t compatFlags = 0;                   // ECompat bits (container v3 and later; 0 for older states)
   std::vector<SampleData::Slot> slots;
-  bool resetNewParams = false;                // block from a test build that predates the DC Filter / Sampler Pitch slots
   bool valid = true;                          // false if the block was present but corrupt / truncated
 };
 
@@ -223,17 +217,11 @@ int Read(const Chunk& chunk, int startPos, Data& out)
       }
     }
   }
-  else if (version >= 2 && version <= 5)
+  else if (version >= 2 && version <= 4)
   {
     uint32_t numSlots = 0;
     if ((pos = chunk.Get(&out.dspVersion, pos)) < 0)
       return fail();
-    if (version <= 4) // test builds, old numbering (see the top of this file)
-    {
-      const uint32_t old = out.dspVersion;
-      out.dspVersion = old <= 1 ? 0u : 1u;
-      out.resetNewParams = old >= 2 && old < 4;
-    }
     if (version >= 3 && (pos = chunk.Get(&out.compatFlags, pos)) < 0)
       return fail();
     if ((pos = chunk.Get(&numSlots, pos)) < 0 || numSlots > kMaxSlots)
