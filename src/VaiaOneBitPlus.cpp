@@ -219,6 +219,8 @@ VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
     pGraphics->AttachControl(mDropBox);
 
     // The sampler plays at a fixed speed unless this is on; then it follows pitch bend, the pitch envelope and the LFO
+    // Output DC filter (10 Hz high-pass), on by default. A switch for now, to compare with the host's own DC filter.
+    pGraphics->AttachControl(new IVToggleControl(IRECT(170.0, 655.0, 300.0, 695.0), kParamDcFilter, "DC filter", SMALLER_LABEL, "OFF", "ON"));
     pGraphics->AttachControl(new IVToggleControl(IRECT(25.0, 655.0, 165.0, 695.0), kParamSamplerPitch, "Sampler pitch", SMALLER_LABEL, "OFF", "BENDS"));
 
     // Switch for projects saved before the sound changes (it is on for them after loading, off for new instances)
@@ -315,6 +317,11 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
   // dspVersion 3 the sampler never followed pitch, so such projects must load with it off.
   if (data.dspVersion < 3)
     ResetParam(kParamSamplerPitch, 0.);
+
+  // The slot of DC Filter used to be the retired "Input Protection" knob, which could hold any value (0 for almost every
+  // project). The filter is part of the sound, so projects saved before dspVersion 4 load with it on.
+  if (data.dspVersion < 4)
+    ResetParam(kParamDcFilter, 1.);
 }
 
 SamplesLayout::SlotInfo VaiaOneBitPlus::SlotInfoFor(int slot) const
@@ -587,6 +594,22 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   mDiag.running.store(mTimeInfo.mTransportIsRunning ? 1 : 0, std::memory_order_relaxed);
   mDiag.tempo.store(mTimeInfo.mTempo, std::memory_order_relaxed);
   mDiag.ppq.store(mTimeInfo.mPPQPos, std::memory_order_relaxed);
+  // Event log (a few lines at most: the first block after a reset, and every change of the transport state). This runs on the
+  // audio thread, which is fine for a diagnostics build and does not depend on the editor's idle timer.
+  {
+    const int running = mTimeInfo.mTransportIsRunning ? 1 : 0;
+    char line[240];
+    if (!mDiag.firstBlockLogged.exchange(true))
+    {
+      std::snprintf(line, sizeof(line), "OneBitPlus: FIRST BLOCK since reset: %d frames, transport=%s, tempo=%g, ppq=%g", nFrames, running ? "RUNNING" : "stopped", mTimeInfo.mTempo, mTimeInfo.mPPQPos);
+      DiagnosticsLog(line);
+    }
+    if (mDiag.lastLoggedRunning.exchange(running) != running)
+    {
+      std::snprintf(line, sizeof(line), "OneBitPlus: TRANSPORT -> %s at block %llu (tempo=%g, ppq=%g)", running ? "RUNNING" : "stopped", static_cast<unsigned long long>(mDiag.blocks.load()), mTimeInfo.mTempo, mTimeInfo.mPPQPos);
+      DiagnosticsLog(line);
+    }
+  }
 #endif
   // the DSP validates the host's tempo and position (HostTime.h): hosts may leave them unset while stopped
   mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, mTimeInfo.mTempo);
@@ -626,10 +649,10 @@ void VaiaOneBitPlus::LogDiagnostics()
   const uint64_t blocks = mDiag.blocks.load();
   char line[400];
   std::snprintf(line, sizeof(line),
-                "OneBitPlus: blocks=%llu (+%llu in the last second) lastBlock=%d frames  transport=%s tempo=%g ppq=%g | midi noteOn=%llu noteOff=%llu cc=%llu other=%llu | resets=%llu | peak=%.3f busyVoices=%d legacyTiming=%d",
+                "OneBitPlus: blocks=%llu (+%llu in the last second) lastBlock=%d frames  transport=%s tempo=%g ppq=%g | midi noteOn=%llu noteOff=%llu cc=%llu other=%llu | resets=%llu | peak=%.3f busyVoices=%d legacyTiming=%d dcFilter=%d",
                 static_cast<unsigned long long>(blocks), static_cast<unsigned long long>(blocks - mDiag.lastLoggedBlocks), mDiag.lastFrames.load(), mDiag.running.load() ? "RUNNING" : "stopped", mDiag.tempo.load(), mDiag.ppq.load(),
                 static_cast<unsigned long long>(mDiag.noteOn.load()), static_cast<unsigned long long>(mDiag.noteOff.load()), static_cast<unsigned long long>(mDiag.controllers.load()), static_cast<unsigned long long>(mDiag.otherMidi.load()),
-                static_cast<unsigned long long>(mDiag.resets.load()), mDiag.peak.exchange(0.), busy, mDSP.mLegacyTiming.load() ? 1 : 0);
+                static_cast<unsigned long long>(mDiag.resets.load()), mDiag.peak.exchange(0.), busy, mDSP.mLegacyTiming.load() ? 1 : 0, mDSP.mDcFilterEnabled.load() ? 1 : 0);
   mDiag.lastLoggedBlocks = blocks;
   DiagnosticsLog(line);
 }
@@ -700,7 +723,9 @@ void VaiaOneBitPlus::OnReset()
   uint32_t currentSampleRate = static_cast<uint32_t>(GetSampleRate());
 #if ONEBIT_DIAGNOSTICS
   mDiag.resets.fetch_add(1, std::memory_order_relaxed);
-  DiagnosticsLog("OneBitPlus: OnReset sampleRate=" + std::to_string(currentSampleRate) + " maxBlock=" + std::to_string(GetBlockSize()));
+  mDiag.midiLogBudget.store(60); // log the first MIDI messages after every reset one by one
+  mDiag.firstBlockLogged.store(false);
+  DiagnosticsLog("OneBitPlus: OnReset (host stop/start or setup) sampleRate=" + std::to_string(currentSampleRate) + " maxBlock=" + std::to_string(GetBlockSize()) + " build=" + __DATE__ + " " + __TIME__ + " dspVersion=" + std::to_string(OneBitState::kLatestDspVersion));
 #endif
 
   // 1. Reset DSP state and buffer allocations
@@ -728,6 +753,12 @@ void VaiaOneBitPlus::ProcessMidiMsg(const IMidiMsg& msg)
   case IMidiMsg::kNoteOff: mDiag.noteOff.fetch_add(1, std::memory_order_relaxed); break;
   case IMidiMsg::kControlChange: mDiag.controllers.fetch_add(1, std::memory_order_relaxed); break;
   default: mDiag.otherMidi.fetch_add(1, std::memory_order_relaxed); break;
+  }
+  if (mDiag.midiLogBudget.fetch_sub(1, std::memory_order_relaxed) > 0)
+  {
+    char line[200];
+    std::snprintf(line, sizeof(line), "OneBitPlus: MIDI status=0x%02X data1=%d data2=%d offset=%d channel=%d transport=%s", static_cast<int>(msg.mStatus), static_cast<int>(msg.mData1), static_cast<int>(msg.mData2), msg.mOffset, msg.Channel(), mTimeInfo.mTransportIsRunning ? "RUNNING" : "stopped");
+    DiagnosticsLog(line);
   }
 #endif
 

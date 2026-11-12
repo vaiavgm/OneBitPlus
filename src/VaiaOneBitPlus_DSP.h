@@ -566,7 +566,24 @@ public:
     // The voices only ever output 0 or +gain, so the signal sits on a large DC offset. Remove it with a one-pole
     // high-pass (10 Hz): y[n] = x[n] - x[n-1] + R * y[n-1]. The audible (AC) part is unchanged. The output is
     // mono (both channels are equal), so one filter is enough.
-    if (mDcFilterEnabled.load(std::memory_order_relaxed))
+    if (!mDcFilterEnabled.load(std::memory_order_relaxed))
+    {
+      // Off: the signal passes through untouched. The filter keeps following it (a running average of the signal), so that
+      // switching it on starts in the settled state, with no click and no 100 ms slide of the offset.
+      const T a = static_cast<T>(1.0 - mDcR);
+      for (int s = 0; s < nFrames; s++)
+      {
+        const T x = outputs[0][s];
+        mDcMean += a * ((std::isfinite(x) ? x : 0) - mDcMean);
+      }
+      if (nFrames > 0)
+      {
+        const T last = outputs[0][nFrames - 1];
+        mDcX1 = std::isfinite(last) ? last : 0;
+        mDcY1 = mDcX1 - mDcMean; // what the filter's output would have been
+      }
+    }
+    else
     {
       for (int s = 0; s < nFrames; s++)
       {
@@ -600,7 +617,7 @@ public:
   void Reset(double sampleRate, int blockSize)
   {    mSampleRate = sampleRate;
     mDcR = std::exp(-2.0 * 3.14159265358979323846 * kDcFilterHz / sampleRate);
-    mDcX1 = mDcY1 = 0;
+    mDcX1 = mDcY1 = mDcMean = 0;
     mSmootherIsLegacy = !mLegacyTiming.load(); // re-apply the smoothing time on the next block
 
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
@@ -793,6 +810,9 @@ public:
     case kParamSamplerPitch:
       mSamplerPitch = value > 0.5;
       break;
+    case kParamDcFilter:
+      mDcFilterEnabled = value > 0.5;
+      break;
     }
   }
 
@@ -807,12 +827,11 @@ public:
     // Sampler Pitch (kParamSamplerPitch): the sampler follows pitch bend, the pitch envelope and the pitch LFO.
     std::atomic<bool> mSamplerPitch{false};
 
-    // Output DC filter. Only switched off by the render regression harness (tests/render) to compare with the
-    // original code.
+    // Output DC filter, switched by the "DC Filter" parameter (and by the render regression harness, to compare with the original code).
     std::atomic<bool> mDcFilterEnabled{true};
     static constexpr double kDcFilterHz = 10.;
     double mDcR = 0.9987; // set in Reset
-    T mDcX1 = 0, mDcY1 = 0;
+    T mDcX1 = 0, mDcY1 = 0, mDcMean = 0; // mDcMean: running average, only followed while the filter is off
 
     static constexpr double kSmoothTimeMs = 5.; // LogParamSmooth's default
     double mSampleRate = 44100.;

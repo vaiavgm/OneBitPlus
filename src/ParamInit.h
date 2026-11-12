@@ -19,8 +19,9 @@ void InitParams(GetParam&& getParam)
   getParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
   getParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
 
-  // retired param: kept only so that saved states keep their layout (see Params.h)
-  getParam(kParamUnused1)->InitDouble("(unused 1)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
+  // Output DC filter: removes the DC offset of the 0/+gain pulse train (a 10 Hz high-pass). On by default. A switch for now, so
+  // it can be compared with a host's own DC filter.
+  getParam(kParamDcFilter)->InitBool("DC Filter", true);
   // Sampler Pitch: off = the sampler always plays at its recorded speed (the original behaviour)
   getParam(kParamSamplerPitch)->InitBool("Sampler Pitch", false);
 

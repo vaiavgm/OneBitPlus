@@ -39,10 +39,10 @@ inline void DebugPrintLong(const std::string& text)
   OutputDebugStringA("\n");
 }
 
-// Set to 1 to log what the host does (see VaiaOneBitPlus::LogDiagnostics). Read the lines starting with "OneBitPlus:" with
+// 1 = log what the host does (see VaiaOneBitPlus::LogDiagnostics). Read the lines starting with "OneBitPlus:" with
 // DebugView (Sysinternals) or a debugger. Costs nothing when 0.
 #ifndef ONEBIT_DIAGNOSTICS
-#define ONEBIT_DIAGNOSTICS 0
+#define ONEBIT_DIAGNOSTICS 1 // ON during testing; set to 0 for a release build
 #endif
 
 inline void DiagnosticsLog(const std::string& line)
@@ -52,7 +52,7 @@ inline void DiagnosticsLog(const std::string& line)
 
 #else
 #ifndef ONEBIT_DIAGNOSTICS
-#define ONEBIT_DIAGNOSTICS 0
+#define ONEBIT_DIAGNOSTICS 1 // ON during testing; set to 0 for a release build
 #endif
 inline void DiagnosticsLog(const std::string& line) { std::fprintf(stderr, "%s\n", line.c_str()); }
 

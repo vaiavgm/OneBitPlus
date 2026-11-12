@@ -29,10 +29,10 @@ END_IPLUG_NAMESPACE
 PY
 
 INC="-I$OUT -I$HERE -I$HERE/stub -I$R -I$R/src -I$IP/IPlug -I$IP/IPlug/Extras -I$IP/IPlug/Extras/Synth -I$IP/IGraphics -I$IP/IGraphics/Controls -I$IP/IGraphics/Platforms -I$IP/IGraphics/Drawing -I$IP/WDL -I$IP/Dependencies/IGraphics/NanoVG/src -I$IP/Dependencies/IGraphics/NanoSVG/src -I$IP/Dependencies/IGraphics/STB"
-DEFS="-D__FLOAT_WORD_ORDER__=__ORDER_LITTLE_ENDIAN__ -DIPLUG_DSP=1 -DIPLUG_EDITOR=0 -DAPP_API -DNO_IGRAPHICS -DFONT_DESCRIPTOR_TYPE=void* -DIGRAPHICS_NANOVG -DIGRAPHICS_GL2 $EXTRA_DEFS"
+DEFS="-D__FLOAT_WORD_ORDER__=__ORDER_LITTLE_ENDIAN__ -DIPLUG_DSP=1 -DIPLUG_EDITOR=0 -DAPP_API -DNO_IGRAPHICS -DFONT_DESCRIPTOR_TYPE=void* -DIGRAPHICS_NANOVG -DIGRAPHICS_GL2 -DONEBIT_DIAGNOSTICS=0 $EXTRA_DEFS" # EXTRA_DEFS=-DONEBIT_DIAGNOSTICS=1 shows the diagnostics log
 # The editor code is compiled but never run (no editor), so the IGraphics symbols it refers to stay unresolved on purpose.
 clang++ -std=c++20 -O1 -g -w -fno-pie -ferror-limit=5 $DEFS -include memory -include "$HERE/shims.h" $INC \
-  "$HERE/PluginSession.cpp" "$R/src/VaiaOneBitPlus.cpp" "$HERE/stubs.cpp" \
+  "${SRC:-$HERE/PluginSession.cpp}" "$R/src/VaiaOneBitPlus.cpp" "$HERE/stubs.cpp" \
   "$IP/IPlug/IPlugAPIBase.cpp" "$IP/IPlug/IPlugProcessor.cpp" "$IP/IPlug/IPlugPluginBase.cpp" "$IP/IPlug/IPlugParameter.cpp" \
   "$IP/IPlug/Extras/Synth/MidiSynth.cpp" "$IP/IPlug/Extras/Synth/VoiceAllocator.cpp" \
   -no-pie -Wl,--unresolved-symbols=ignore-all -lpthread -o "$OUT/PluginSession"

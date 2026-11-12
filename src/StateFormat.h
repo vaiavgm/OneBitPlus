@@ -30,6 +30,8 @@
 //                clean-up builds before the sound changes).
 //  dspVersion 2: audible release, host tempo for synced LFOs, samples at their own rate, pitch keytrack,
 //                DC-filtered output.
+//  dspVersion 4: the "DC Filter" switch (it reuses the retired Input Protection slot: states before version 4
+//                get it set to ON).
 //  dspVersion 3: the "Sampler Pitch" parameter (it reuses the retired Input Dither slot: states before
 //                version 3 get it reset to off).
 //
@@ -51,7 +53,7 @@ constexpr uint32_t kLatestVersion = 4;
 
 // Sound-behaviour versions (see the comment at the top)
 constexpr uint32_t kDspVersionLegacy = 1;
-constexpr uint32_t kLatestDspVersion = 3;
+constexpr uint32_t kLatestDspVersion = 4;
 
 // Behaviours of older versions that a project can keep using
 enum ECompat : uint32_t

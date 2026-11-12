@@ -185,9 +185,9 @@ Saved states carry a sound-behaviour version (`dspVersion`, see `src/StateFormat
 | Tempo for synced LFOs (B8) | **"Legacy timing" switch on**: fixed 120 BPM | host tempo |
 | Sample playback speed (B4) | **"Legacy timing" switch on**: as if every sample was 44.1 kHz | the sample's own rate |
 | Smoothing time | **"Legacy timing" switch on**: the old (48 kHz) coefficients | follows the sample rate |
-| Dither / Input Protection | removed; the two parameter slots stay so the saved parameter run keeps its length: one is a hidden placeholder, the other is now Sampler Pitch (below) | same |
+| Dither / Input Protection | removed; the two parameter slots stay so the saved parameter run keeps its length, and both are reused: Input Protection became **DC Filter** and Input Dither became **Sampler Pitch** (see the two rows below) | same |
 | Sampler Pitch (new, `dspVersion` 3) | loads **off**: the slot used to be the retired Dither knob, so states before version 3 get it reset to 0 | off by default; it is an ordinary parameter, so it is saved with each project and later changes of the default can't affect saved projects |
-| DC filter | applies to all projects (the audible part of the signal is unchanged) | on |
+| DC filter (`dspVersion` 4) | a 10 Hz high-pass on the output, **ON** for every project: the slot used to be the retired Input Protection knob, so states before version 4 get it set to ON. A **DC filter** switch (under the drop box) turns it off, for comparing with a host's own DC filter; the choice is saved with the project. The switch is temporary: the final build probably has no way to turn it off. | on by default |
 
 The switch is saved with the project. A migrated project keeps sounding like before until the user turns the switch off, and what to do with an old project then is up to them. **Proof:** the render harness (`tests/render/`) shows that the new code in legacy mode with the DC filter off reproduces the original code bit for bit (host tempo 140, transport stopping halfway, tempo-synced LFOs, sampler, unison, 48 and 44.1 kHz).
 

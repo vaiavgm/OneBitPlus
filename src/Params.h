@@ -148,10 +148,11 @@ enum EParams
 
 
 
-  // Retired: "Input Protection" (kParamUnused1) did nothing, so its slot stays as a hidden placeholder. iPlug2 saves
-  // and restores parameters as a fixed-length run: removing or adding a slot would shift the rest of the saved state
-  // of every existing project.
-  kParamUnused1,
+  // DC Filter (on/off) reuses the slot of the retired "Input Protection" knob, which did nothing. iPlug2 saves and
+  // restores parameters as a fixed-length run: removing or adding a slot would shift the rest of the saved state of every
+  // existing project. Old states may hold a stray value there, so states saved before dspVersion 4 get it set to ON when
+  // they are loaded (the filter is part of the sound now).
+  kParamDcFilter,
   // Sampler Pitch (on/off) reuses the slot of the retired "Input Dither" knob. Old states may hold a stray value
   // there, so states saved before dspVersion 3 get it reset to 0 (off) when they are loaded.
   kParamSamplerPitch,
@@ -189,4 +190,4 @@ static_assert(TypeParam(1, kParamPwmAttack1) == kParamPwmAttack2 && TypeParam(2,
               "instrument param blocks must be contiguous");
 static_assert(TypeParam(3, kParamExtraDetune1) == kParamExtraDetune4 && TypeParam(1, kParamPitchOffset1) == kParamPitchOffset2,
               "instrument param blocks must have identical layouts");
-static_assert(kParamUnused1 == kParamExtraDetune4 + 1, "global params must follow the instrument blocks");
+static_assert(kParamDcFilter == kParamExtraDetune4 + 1, "global params must follow the instrument blocks");

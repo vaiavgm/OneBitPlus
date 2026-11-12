@@ -42,7 +42,13 @@ tests/headless/build_and_run.sh /path/to/iPlug2
 
 ### Diagnostics when something goes wrong in a host
 
-Set `ONEBIT_DIAGNOSTICS` to `1` (in `src/Debug.h`, or as a preprocessor definition) and rebuild. Once per second the plugin then writes a line starting with `OneBitPlus:` to the Windows debug output (read it with DebugView from Sysinternals): blocks processed, transport state, tempo and position as the host reports them, MIDI messages by type, resets, peak level and busy voices. It tells whether the host calls the plugin while stopped and what it sends. Off by default, no cost when off.
+`ONEBIT_DIAGNOSTICS` (`src/Debug.h`) is **1 during testing**: the plugin writes lines starting with `OneBitPlus:` to the Windows debug output (read them with DebugView from Sysinternals, with "Capture Win32" on). Set it to 0 for a release build; it costs nothing then.
+
+- `OnReset ...`: every host stop/start or setup, with sample rate, maximum block size, the build time and the state version. Use it to check that you are running the build you think you are.
+- `FIRST BLOCK since reset`: the first block the host processes, with the transport state, tempo and position as the host reports them. If it never appears, the host does not call the plugin.
+- `TRANSPORT -> RUNNING / stopped`: every change of the transport state.
+- `MIDI status=...`: the first 60 MIDI messages after each reset, one by one, with their type, data, offset and the transport state. This shows what the host sends at Play and Stop.
+- Once per second (needs the editor open, it runs from the editor's idle timer): blocks processed, transport, tempo, position, MIDI counts by type, resets, peak level, busy voices, and the Legacy-timing and DC-filter switches.
 
 Beyond that, audio is tested by listening, using the REAPER sessions in `ReaperProjects/`.
 

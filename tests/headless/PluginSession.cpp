@@ -118,6 +118,64 @@ static void GhostVoices()
   }
 }
 
+// mean of the output over a while (a single block is not a whole number of periods of the tone)
+static double MeanOver(Host& h, double seconds, std::vector<IMidiMsg> firstMidi = {})
+{
+  double sum = 0; int blocks = std::max(1, (int)(seconds * h.sr / 480));
+  for (int b = 0; b < blocks; ++b) sum += h.Process(480, b == 0 ? firstMidi : std::vector<IMidiMsg>{}).mean;
+  return sum / blocks;
+}
+
+static void SetDcFilter(Host& h, bool on)
+{
+  h.plug.GetParam(kParamDcFilter)->Set(on ? 1. : 0.);
+  h.plug.OnParamChange(kParamDcFilter);
+}
+
+static void DcFilterSwitch()
+{
+  std::printf("DC filter switch:\n");
+  Host h; h.Setup();
+  EXPECT(h.plug.GetParam(kParamDcFilter)->Value() == 1.0, "the DC filter defaults to ON");
+  h.Run(0.4, {NoteOn(60, 80)});
+  EXPECT(std::fabs(MeanOver(h, 0.3)) < 0.01 && h.Run(0.05).rms > 0.2, "ON: the offset is removed (mean about 0) and the tone is there");
+
+  SetDcFilter(h, false);
+  h.Run(0.1);
+  const double offMean = MeanOver(h, 0.3);
+  EXPECT(offMean > 0.2 && offMean < 0.3 && h.Run(0.05).peak > 0.49 && h.Run(0.05).peak < 0.51, "OFF: the raw 0/+0.5 pulse train, offset and all");
+
+  SetDcFilter(h, true); // switching it on again must not click
+  double peak = 0;
+  for (int b = 0; b < 30; ++b) peak = std::max(peak, h.Process(480).peak);
+  EXPECT(peak < 0.31, "switching ON again does not click (no overshoot)");
+  EXPECT(std::fabs(MeanOver(h, 0.3)) < 0.01, "ON again: zero offset");
+}
+
+static void DcFilterMigration()
+{
+  std::printf("loading saved states:\n");
+  // a state from a version where that slot was the retired "Input Protection" knob (0 in almost every project), dspVersion 3
+  { Host a; a.plug.GetParam(kParamDcFilter)->Set(0.);
+    IByteChunk chunk; a.plug.SerializeParams(chunk); OneBitState::Write(chunk, {}, 3, 0);
+    Host b; b.Setup(); SetDcFilter(b, false); b.plug.UnserializeState(chunk, 0);
+    EXPECT(b.plug.GetParam(kParamDcFilter)->Value() == 1.0, "an older project (dspVersion 3) loads with the DC filter ON");
+    EXPECT(std::fabs(MeanOver(b, 0.6, {NoteOn(60, 80)})) < 0.01, "...and it is on in the DSP too"); }
+  // a project from the original version: parameters only, no custom block at all
+  { Host a; a.plug.GetParam(kParamDcFilter)->Set(37.); // a stray value of the old slot
+    IByteChunk chunk; a.plug.SerializeParams(chunk);
+    Host b; b.Setup(); SetDcFilter(b, false); b.plug.UnserializeState(chunk, 0);
+    EXPECT(b.plug.GetParam(kParamDcFilter)->Value() == 1.0, "a project from the original version loads with the DC filter ON"); }
+  // this version's own state keeps the user's choice, both ways
+  for (bool wanted : {false, true})
+  { Host a; a.Setup(); SetDcFilter(a, wanted);
+    IByteChunk chunk; a.plug.SerializeState(chunk);
+    Host b; b.Setup(); SetDcFilter(b, !wanted); b.plug.UnserializeState(chunk, 0);
+    EXPECT(b.plug.GetParam(kParamDcFilter)->Value() == (wanted ? 1.0 : 0.0), "the DC filter choice is saved with the project");
+    const double mean = MeanOver(b, 0.6, {NoteOn(60, 80)});
+    EXPECT(wanted ? std::fabs(mean) < 0.01 : mean > 0.2, "...and the DSP follows it after loading"); }
+}
+
 static int gOnlySession = -1; // replay one session verbosely
 
 static void RandomSessions(int sessions)
@@ -188,6 +246,8 @@ int main(int argc, char** argv)
   RealSession();
   ControllerMessages();
   GhostVoices();
+  DcFilterSwitch();
+  DcFilterMigration();
   if (argc > 2) gOnlySession = std::atoi(argv[2]);
   RandomSessions(argc > 1 ? std::atoi(argv[1]) : 150);
   std::printf("%s\n", gFailures ? "FAILED" : "all headless scenarios passed");
