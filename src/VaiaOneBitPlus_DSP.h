@@ -143,6 +143,10 @@ public:
     SampleOscillator<T> mSampleOsc{};
     // generation of the SampleManager bank mSampleOsc points into (0 = static data)
     uint64_t mBankGeneration = 0;
+    // True from Trigger() until both envelopes have finished. Only then may a synth note keep sounding after its gate
+    // has dropped (release). Without it, voices whose envelopes are merely "busy" (reset by the host, never played)
+    // would sound without a note.
+    bool mNoteActive = false;
 
 
 
@@ -254,6 +258,7 @@ public:
       MY_PRINTF("Trigger: this=%p level=%.4f velInt=%d isRetrig=%d => mOscId=%zu mMode=%d (after)\n", (void*)this, level, velInt, isRetrigger ? 1 : 0, mOscId, static_cast<int>(mMode));
 
 
+      mNoteActive = true;
       mSampleOsc.Reset();
       auto sampleInfo = mParentDSP.mSampleManager.GetSampleForVelocity(level);
       // The sample is rendered at the host rate it was imported with and plays at that rate. Legacy projects keep
@@ -413,6 +418,9 @@ public:
 
 
 
+        if (mNoteActive && !mPwmEnv.GetBusy() && !mPitchEnv.GetBusy())
+          mNoteActive = false; // release is over
+
         double noiseThreshold = velocity * (1.0 - mModWheel);
 
         // Notes 0-2 are noise and note 3 is the sampler: all of them stop as soon as the key is released.
@@ -442,7 +450,7 @@ public:
             ProcessSampleOscillator(outputs, i, sampleFreq, &mSampleOsc);
           }
         }
-        else if (velocity > 0.0 || mPwmEnv.GetBusy() || mPitchEnv.GetBusy())
+        else if (velocity > 0.0 || (mNoteActive && (mPwmEnv.GetBusy() || mPitchEnv.GetBusy())))
         {
           ProcessStandardOscillators(outputs, i, oscFreq, pwmFunc, unison);
         }
@@ -558,7 +566,7 @@ public:
     // The voices only ever output 0 or +gain, so the signal sits on a large DC offset. Remove it with a one-pole
     // high-pass (10 Hz): y[n] = x[n] - x[n-1] + R * y[n-1]. The audible (AC) part is unchanged. The output is
     // mono (both channels are equal), so one filter is enough.
-    if (mDcBlockerEnabled.load(std::memory_order_relaxed))
+    if (mDcFilterEnabled.load(std::memory_order_relaxed))
     {
       for (int s = 0; s < nFrames; s++)
       {
@@ -591,12 +599,13 @@ public:
 
   void Reset(double sampleRate, int blockSize)
   {    mSampleRate = sampleRate;
-    mDcR = std::exp(-2.0 * 3.14159265358979323846 * kDcBlockerHz / sampleRate);
+    mDcR = std::exp(-2.0 * 3.14159265358979323846 * kDcFilterHz / sampleRate);
     mDcX1 = mDcY1 = 0;
     mSmootherIsLegacy = !mLegacyTiming.load(); // re-apply the smoothing time on the next block
 
     mSynth.SetSampleRateAndBlockSize(sampleRate, blockSize);
     mSynth.Reset();
+    mSynth.ForEachVoice([](SynthVoice& voice) { static_cast<Voice&>(voice).mNoteActive = false; }); // a host stop/start silences everything
 
     for (int t = 0; t < kNumTypes; ++t)
     {
@@ -798,10 +807,10 @@ public:
     // Sampler Pitch (kParamSamplerPitch): the sampler follows pitch bend, the pitch envelope and the pitch LFO.
     std::atomic<bool> mSamplerPitch{false};
 
-    // Output DC blocker. Only switched off by the render regression harness (tests/render) to compare with the
+    // Output DC filter. Only switched off by the render regression harness (tests/render) to compare with the
     // original code.
-    std::atomic<bool> mDcBlockerEnabled{true};
-    static constexpr double kDcBlockerHz = 10.;
+    std::atomic<bool> mDcFilterEnabled{true};
+    static constexpr double kDcFilterHz = 10.;
     double mDcR = 0.9987; // set in Reset
     T mDcX1 = 0, mDcY1 = 0;
 

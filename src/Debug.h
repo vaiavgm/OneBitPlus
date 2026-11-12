@@ -39,7 +39,23 @@ inline void DebugPrintLong(const std::string& text)
   OutputDebugStringA("\n");
 }
 
+// Set to 1 to log what the host does (see VaiaOneBitPlus::LogDiagnostics). Read the lines starting with "OneBitPlus:" with
+// DebugView (Sysinternals) or a debugger. Costs nothing when 0.
+#ifndef ONEBIT_DIAGNOSTICS
+#define ONEBIT_DIAGNOSTICS 0
+#endif
+
+inline void DiagnosticsLog(const std::string& line)
+{
+  OutputDebugStringA((line + "\n").c_str()); // unlike MY_PRINTF this also reaches DebugView, not only an attached debugger
+}
+
 #else
+#ifndef ONEBIT_DIAGNOSTICS
+#define ONEBIT_DIAGNOSTICS 0
+#endif
+inline void DiagnosticsLog(const std::string& line) { std::fprintf(stderr, "%s\n", line.c_str()); }
+
 // Non-Windows: debug output is compiled out.
 #define MY_PRINTF(fmt, ...) \
   do                        \

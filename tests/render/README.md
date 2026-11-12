@@ -4,7 +4,7 @@
 
 - **Refactors and performance work** must keep the hash identical.
 - **Intended sound changes** change it: update the reference hashes in `RenderHash.cpp`, and listen.
-- `legacy` renders like a project saved by the original version. With `nodc` (DC blocker off) it must equal the **original** code's hash (see the header of `RenderHash.cpp`). That is the proof that migrated projects sound the same.
+- `legacy` renders like a project saved by the original version. With `nodc` (DC filter off) it must equal the **original** code's hash (see the header of `RenderHash.cpp`). That is the proof that migrated projects sound the same.
 - `dump <file>` writes the raw output, to inspect or diff two builds.
 
 ```sh

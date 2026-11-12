@@ -580,8 +580,26 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   memset(outputs[0], 0, nFrames * sizeof(sample));
   memset(outputs[1], 0, nFrames * sizeof(sample));
 
+#if ONEBIT_DIAGNOSTICS
+  mDiag.blocks.fetch_add(1, std::memory_order_relaxed);
+  mDiag.frames.fetch_add(static_cast<uint64_t>(nFrames), std::memory_order_relaxed);
+  mDiag.lastFrames.store(nFrames, std::memory_order_relaxed);
+  mDiag.running.store(mTimeInfo.mTransportIsRunning ? 1 : 0, std::memory_order_relaxed);
+  mDiag.tempo.store(mTimeInfo.mTempo, std::memory_order_relaxed);
+  mDiag.ppq.store(mTimeInfo.mPPQPos, std::memory_order_relaxed);
+#endif
   // the DSP validates the host's tempo and position (HostTime.h): hosts may leave them unset while stopped
   mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, mTimeInfo.mTempo);
+
+#if ONEBIT_DIAGNOSTICS
+  {
+    double peak = 0.;
+    for (int i = 0; i < nFrames; ++i)
+      peak = std::max(peak, std::fabs(static_cast<double>(outputs[0][i])));
+    if (peak > mDiag.peak.load(std::memory_order_relaxed))
+      mDiag.peak.store(peak, std::memory_order_relaxed);
+  }
+#endif
 
   // visualisation only (lock-free, no allocation)
   mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);
@@ -593,8 +611,36 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   }
 }
 
+#if ONEBIT_DIAGNOSTICS
+void VaiaOneBitPlus::LogDiagnostics()
+{
+  const uint64_t now = SamplesPanel::NowMs();
+  if (now < mDiag.lastLogMs + 1000)
+    return;
+  mDiag.lastLogMs = now;
+
+  int busy = 0;
+  for (int v = 0; v < static_cast<int>(mDSP.mSynth.NVoices()); ++v)
+    busy += mDSP.mSynth.GetVoice(v)->GetBusy() ? 1 : 0;
+
+  const uint64_t blocks = mDiag.blocks.load();
+  char line[400];
+  std::snprintf(line, sizeof(line),
+                "OneBitPlus: blocks=%llu (+%llu in the last second) lastBlock=%d frames  transport=%s tempo=%g ppq=%g | midi noteOn=%llu noteOff=%llu cc=%llu other=%llu | resets=%llu | peak=%.3f busyVoices=%d legacyTiming=%d",
+                static_cast<unsigned long long>(blocks), static_cast<unsigned long long>(blocks - mDiag.lastLoggedBlocks), mDiag.lastFrames.load(), mDiag.running.load() ? "RUNNING" : "stopped", mDiag.tempo.load(), mDiag.ppq.load(),
+                static_cast<unsigned long long>(mDiag.noteOn.load()), static_cast<unsigned long long>(mDiag.noteOff.load()), static_cast<unsigned long long>(mDiag.controllers.load()), static_cast<unsigned long long>(mDiag.otherMidi.load()),
+                static_cast<unsigned long long>(mDiag.resets.load()), mDiag.peak.exchange(0.), busy, mDSP.mLegacyTiming.load() ? 1 : 0);
+  mDiag.lastLoggedBlocks = blocks;
+  DiagnosticsLog(line);
+}
+#endif
+
 void VaiaOneBitPlus::OnIdle()
 {
+#if ONEBIT_DIAGNOSTICS
+  LogDiagnostics();
+#endif
+
   // Main thread: pick up finished background renders
   HandleJobResults();
 
@@ -652,6 +698,10 @@ void VaiaOneBitPlus::OnIdle()
 void VaiaOneBitPlus::OnReset()
 {
   uint32_t currentSampleRate = static_cast<uint32_t>(GetSampleRate());
+#if ONEBIT_DIAGNOSTICS
+  mDiag.resets.fetch_add(1, std::memory_order_relaxed);
+  DiagnosticsLog("OneBitPlus: OnReset sampleRate=" + std::to_string(currentSampleRate) + " maxBlock=" + std::to_string(GetBlockSize()));
+#endif
 
   // 1. Reset DSP state and buffer allocations
   mDSP.Reset(currentSampleRate, GetBlockSize());
@@ -670,6 +720,16 @@ void VaiaOneBitPlus::OnReset()
 void VaiaOneBitPlus::ProcessMidiMsg(const IMidiMsg& msg)
 {
   TRACE;
+
+#if ONEBIT_DIAGNOSTICS
+  switch (msg.StatusMsg())
+  {
+  case IMidiMsg::kNoteOn: mDiag.noteOn.fetch_add(1, std::memory_order_relaxed); break;
+  case IMidiMsg::kNoteOff: mDiag.noteOff.fetch_add(1, std::memory_order_relaxed); break;
+  case IMidiMsg::kControlChange: mDiag.controllers.fetch_add(1, std::memory_order_relaxed); break;
+  default: mDiag.otherMidi.fetch_add(1, std::memory_order_relaxed); break;
+  }
+#endif
 
   switch (msg.StatusMsg())
   {

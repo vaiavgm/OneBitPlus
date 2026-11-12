@@ -73,6 +73,58 @@ static Outcome Play(std::vector<IParam>& params, double sr, int note, int vel, b
   return o;
 }
 
+// No note, no sound. A host stop/start calls OnReset (-> DSP Reset), which puts every voice into its release stage; with a
+// release time set, those voices used to sound again as soon as ANY MIDI message arrived (even a controller), all 32 at once.
+static bool NoGhostVoices(std::vector<IParam>& params, double sr, double release)
+{
+  auto* dsp = new OneBitPlusDSP<sample>(32);
+  const int bs = 256;
+  auto push = [&] {
+    dsp->Reset(sr, bs);
+    for (int p = 0; p < kNumParams; ++p)
+      dsp->SetParam(p, params[p].Value());
+    for (int t = 0; t < kNumTypes; ++t)
+    {
+      dsp->SetParam(TypeParam(t, kParamPwmRelease1), release);
+      dsp->SetParam(TypeParam(t, kParamPitchRelease1), release);
+    }
+  };
+  std::vector<sample> L(bs), R(bs);
+  sample* outs[2] = {L.data(), R.data()};
+  auto run = [&](double seconds, const std::vector<IMidiMsg>& midi) {
+    double peak = 0;
+    for (int b = 0; b < static_cast<int>(seconds * sr / bs); ++b)
+    {
+      if (b == 0)
+        for (auto m : midi)
+          dsp->ProcessMidiMsg(m);
+      std::memset(L.data(), 0, bs * sizeof(sample));
+      std::memset(R.data(), 0, bs * sizeof(sample));
+      dsp->ProcessBlock(nullptr, outs, 2, bs, 0., false, 120.);
+      if (b >= 4) // skip the first blocks: the DC filter's own tail
+        for (int i = 0; i < bs; ++i)
+          peak = std::max(peak, std::fabs(static_cast<double>(L[i])));
+    }
+    return peak;
+  };
+  IMidiMsg cc;
+  cc.MakeControlChangeMsg(IMidiMsg::kModWheel, 0.0);
+
+  push();
+  bool ok = run(0.4, {cc}) < 0.01; // the very first MIDI message of a fresh instance
+  for (int note : {60, 62, 64, 65, 67, 69})
+  {
+    IMidiMsg on, off;
+    on.MakeNoteOnMsg(note, 20, 0);
+    off.MakeNoteOffMsg(note, 0);
+    run(0.05, {on, off});
+  }
+  push(); // the host stops and starts: OnReset
+  ok &= run(0.6, {cc}) < 0.01;
+  delete dsp;
+  return ok;
+}
+
 int main()
 {
   std::atomic<bool> done{false};
@@ -120,6 +172,15 @@ int main()
                     std::printf("FAIL: sr=%.0f running=%d legacy=%d tempo=%g ppq=%g note=%d vel=%d  std=%.3f duty=%.2f finite=%d\n", sr, running, legacy, tempo, ppq, note, vel, o.std, o.duty, o.finite);
                 }
               }
+  int ghostFailures = 0;
+  for (double sr : {44100., 48000., 96000.})
+    for (double release : {0., 50., 300., 500.})
+      if (!NoGhostVoices(params, sr, release))
+      {
+        ++ghostFailures;
+        std::printf("FAIL: ghost voices after a reset (sr=%.0f release=%.0f ms)\n", sr, release);
+      }
+  failures += ghostFailures;
   done = true;
   watchdog.join();
   std::printf("%d scenarios, %d failures. Lowest signal level (std) %.3f, share of positive samples %.2f-%.2f (50 %% square = 0.50)\n", scenarios, failures, worstStd, minDuty, maxDuty);

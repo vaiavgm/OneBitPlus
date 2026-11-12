@@ -8,8 +8,10 @@
 //   48000 Hz: 0bf6817515ca0ac7      44100 Hz: b61090932549d1df
 // The current code rendering "legacy" at HOST_TEMPO 140 must print exactly these. That is the proof that
 // projects loaded in legacy mode keep their sound.
-// Sampler Pitch is off in all of these; "samplerpitch" switches it on (48000 Hz: 1c839245eecd6537, 44100 Hz: d74f027df3a35323).
-// Current code, non-legacy (HOST_TEMPO 140):  48000 Hz: 434fe5a91a646863      44100 Hz: 8fdb21257b0ef52f
+// Sampler Pitch is off in all of these; "samplerpitch" switches it on (48000 Hz: fad75703976ee497, 44100 Hz: e27ab181ef4017fb).
+// Current code, non-legacy (HOST_TEMPO 140):  48000 Hz: b64cf12adfab22d7      44100 Hz: c4ab8941afff6367
+// (These changed once, when ghost voices were fixed: before, every voice that a host reset had put into its release stage
+// sounded again at the first MIDI message. The legacy hashes did not change.)
 // Non-legacy hashes change whenever the sound is changed on purpose: update them in the commit that does it.
 #include "VaiaOneBitPlus_DSP.h"
 #include <cstdio>
@@ -33,7 +35,7 @@ int main(int argc, char** argv)
 {
   const double sr = argc > 1 ? atof(argv[1]) : 48000.0;
   // "legacy" renders like a project saved by the original version (see src/StateFormat.h, kCompatLegacyTiming)
-  // "nodc" switches the output DC blocker off (to compare with the original code, which has none)
+  // "nodc" switches the output DC filter off (to compare with the original code, which has none)
   bool legacy = false, noDc = false, samplerPitch = false;
   for (int a = 2; a < argc; ++a)
   {
@@ -56,7 +58,7 @@ int main(int argc, char** argv)
   setDefaults();
 #ifndef ONEBIT_NO_LEGACY_API // defined when building against the original code, which has no legacy switch
   dsp->mLegacyTiming = legacy;
-  dsp->mDcBlockerEnabled = !noDc;
+  dsp->mDcFilterEnabled = !noDc;
 #endif
 #ifndef ONEBIT_NO_LEGACY_API
   dsp->SetParam(kParamSamplerPitch, samplerPitch ? 1. : 0.);

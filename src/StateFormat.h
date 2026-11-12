@@ -29,7 +29,7 @@
 //  dspVersion 1: the original behaviour (also every state without a version: v0, v1, and v2 written by
 //                clean-up builds before the sound changes).
 //  dspVersion 2: audible release, host tempo for synced LFOs, samples at their own rate, pitch keytrack,
-//                DC-blocked output.
+//                DC-filtered output.
 //  dspVersion 3: the "Sampler Pitch" parameter (it reuses the retired Input Dither slot: states before
 //                version 3 get it reset to off).
 //

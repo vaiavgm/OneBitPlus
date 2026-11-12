@@ -96,6 +96,19 @@ private:
   // Shows the Hz or the tempo-sync LFO rate knob of an instrument type, depending on its sync switch.
   void UpdateLfoRateVisibility(int type);
 
+#if ONEBIT_DIAGNOSTICS
+  // What the host does, counted on the audio thread and logged once per second from OnIdle (see Debug.h)
+  struct Diagnostics
+  {
+    std::atomic<uint64_t> blocks{0}, frames{0}, noteOn{0}, noteOff{0}, controllers{0}, otherMidi{0}, resets{0};
+    std::atomic<int> lastFrames{0}, running{0};
+    std::atomic<double> tempo{0.}, ppq{0.}, peak{0.};
+    uint64_t lastLoggedBlocks = 0;
+    uint64_t lastLogMs = 0;
+  } mDiag;
+  void LogDiagnostics();
+#endif
+
   // Set when samples were replaced off the main thread (state load); OnIdle refreshes the drop box.
   std::atomic<bool> mSamplesChanged{false};
 

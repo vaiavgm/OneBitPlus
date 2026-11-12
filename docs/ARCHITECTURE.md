@@ -48,7 +48,7 @@ Voice::ProcessSamplesAccumulating, per sample:
    else             → up to 8 unison VaiaOscillators, OR-ed: any high → 1.0; keeps sounding
                       until both envelopes have finished their release
                                          │
-OneBitPlusDSP::ProcessBlock output stage: |x|<eps → 0, x>0 → +gain, x<0 → −gain, then a 10 Hz DC blocker
+OneBitPlusDSP::ProcessBlock output stage: |x|<eps → 0, x>0 → +gain, x<0 → −gain, then a 10 Hz DC filter
 ```
 
 ## Instrument ("Type") selection

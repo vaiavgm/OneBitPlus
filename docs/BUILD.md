@@ -32,6 +32,18 @@ g++ -std=c++17 -I. tests/TestMain.cpp -o OneBitPlusTests && ./OneBitPlusTests
 tests/render/render_hash.sh /path/to/iPlug2
 ```
 
+### Headless test of the real plugin class
+
+`tests/headless/` runs the real `VaiaOneBitPlus` class without a host or editor, driven like iPlug2's VST3 wrapper drives it (a REAPER-like session, controller messages, ghost voices after stop/start, random sessions). See [tests/headless/README.md](../tests/headless/README.md).
+
+```sh
+tests/headless/build_and_run.sh /path/to/iPlug2
+```
+
+### Diagnostics when something goes wrong in a host
+
+Set `ONEBIT_DIAGNOSTICS` to `1` (in `src/Debug.h`, or as a preprocessor definition) and rebuild. Once per second the plugin then writes a line starting with `OneBitPlus:` to the Windows debug output (read it with DebugView from Sysinternals): blocks processed, transport state, tempo and position as the host reports them, MIDI messages by type, resets, peak level and busy voices. It tells whether the host calls the plugin while stopped and what it sends. Off by default, no cost when off.
+
 Beyond that, audio is tested by listening, using the REAPER sessions in `ReaperProjects/`.
 
 ## Release scripts
