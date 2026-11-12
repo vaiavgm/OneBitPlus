@@ -155,11 +155,12 @@ static void DcFilterSwitch()
 static void DcFilterMigration()
 {
   std::printf("loading saved states:\n");
-  // a state from the original version (dspVersion 0), where that slot was the retired "Input Protection" knob (0 in almost every project)
+  // a state from the original plugin, where that slot was the retired "Input Protection" knob (0 in almost every project)
   { Host a; a.plug.GetParam(kParamDcFilter)->Set(0.);
-    IByteChunk chunk; a.plug.SerializeParams(chunk); OneBitState::Write(chunk, {}, 0, 0);
+    IByteChunk chunk; a.plug.SerializeParams(chunk);
+    { uint32_t v1 = 1, none = 0; chunk.Put(&v1); chunk.Put(&none); chunk.Put(&none); } // the original's block: v1, no samples
     Host b; b.Setup(); SetDcFilter(b, false); b.plug.UnserializeState(chunk, 0);
-    EXPECT(b.plug.GetParam(kParamDcFilter)->Value() == 1.0, "an original project (dspVersion 0) loads with the DC filter ON");
+    EXPECT(b.plug.GetParam(kParamDcFilter)->Value() == 1.0, "an original project loads with the DC filter ON");
     EXPECT(std::fabs(MeanOver(b, 0.6, {NoteOn(60, 80)})) < 0.01, "...and it is on in the DSP too"); }
   // a project from the original version: parameters only, no custom block at all
   { Host a; a.plug.GetParam(kParamDcFilter)->Set(37.); // a stray value of the old slot

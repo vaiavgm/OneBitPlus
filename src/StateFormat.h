@@ -8,31 +8,25 @@
 //   Get(T*, int pos), GetBytes(void*, int n, int pos), GetStr(Str&, int pos), Size()
 // where every Get* returns the position after the read value, or a negative value on failure.
 //
-// Layouts
-// -------
-//  v0  (implicit) no block at all, only parameters. Read as "no samples".
-//  v1  u32 version=1 | u32 numSlots | numSlots x {u32 sr, u32 size, size bytes}
-//      | u32 pathCount | pathCount x {str path, str pipeline}
-//  v2  u32 version=2 | u32 dspVersion | u32 numSlots
-//      | numSlots x {u32 sr, u32 size, size bytes, str path, str pipeline}
-//  v3  u32 version=3 | u32 dspVersion | u32 compatFlags | u32 numSlots | (slots as in v2)
-//  v4  u32 version=4 | u32 dspVersion | u32 compatFlags | u32 numSlots
+// Versions
+// --------
+// There is one version number, the first u32 of the block. It says both how the block is laid out and which behaviour the
+// project was made with, so loading can migrate old projects (see VaiaOneBitPlus::ApplyMigrations).
+//
+//  v1  the ORIGINAL plugin, before the clean-up (it did write this 1): u32 version=1 | u32 numSlots
+//      | numSlots x {u32 sr, u32 size, size bytes} | u32 pathCount | pathCount x {str path, str pipeline}
+//      Also counts as the original: a state with no block at all (parameters only).
+//  v2  this branch: u32 version=2 | u32 compatFlags | u32 numSlots
 //      | numSlots x {u32 sr, u32 size, size bytes, str path, str pipeline, u32 embedded
 //                    [if embedded: u32 sourceRate, u32 sourceCount, sourceCount x int16]}
-//      A slot with size 0 is a free slot (a hole): it keeps the slots after it at their velocity. v1-v3 never
-//      had holes, so their reader drops empty slots as it always did.
+//      A slot with size 0 is a free slot (a hole): it keeps the slots after it at their velocity. v1 had no holes,
+//      so its reader drops empty slots, as the original did.
 //
-// dspVersion describes the *sound behaviour* the state was saved with, independent of the container
-// layout. Loading a state with an older dspVersion lets the plugin migrate parameters so that existing
-// projects keep sounding the same (see VaiaOneBitPlus::ApplyMigrations).
+// What v2 changed in the sound (audible release, host tempo, samples at their own rate, pitch keytrack, DC-filtered
+// output, DC Filter and Sampler Pitch switches) is migrated for v1 projects. Bump kLatestVersion only when the saved layout
+// or the sound changes again after v2 has been released.
 //
-//  dspVersion 0: the original behaviour, from before the clean-up (every state without a version: v0 and v1 blocks).
-//  dspVersion 1: everything the clean-up added: audible release, host tempo for synced LFOs, samples at their own rate,
-//                pitch keytrack, DC-filtered output, the "DC Filter" switch and the "Sampler Pitch" switch (they reuse the
-//                retired Input Protection / Input Dither slots, so states before version 1 get them set to ON / off).
-//  Only bump this when the sound changes again on purpose.
-//
-// compatFlags are switches that keep a *behaviour* of an older version for as long as the user wants.
+// compatFlags are switches that keep a *behaviour* of the original for as long as the user wants.
 // They are saved with the project (see ECompat).
 
 #include <algorithm>
@@ -46,11 +40,8 @@
 namespace OneBitState
 {
 
-constexpr uint32_t kLatestVersion = 4;
-
-// Sound-behaviour versions (see the comment at the top)
-constexpr uint32_t kDspVersionLegacy = 0;
-constexpr uint32_t kLatestDspVersion = 1;
+constexpr uint32_t kOriginalVersion = 1; // the plugin before the clean-up (a state with no block counts as this too)
+constexpr uint32_t kLatestVersion = 2;
 
 // Behaviours of older versions that a project can keep using
 enum ECompat : uint32_t
@@ -68,19 +59,17 @@ constexpr uint32_t kMaxSourceSamples = 100'000'000; // embedded source audio, 16
 
 struct Data
 {
-  uint32_t version = 0;                       // container version that was read (0 = no block)
-  uint32_t dspVersion = kDspVersionLegacy;    // sound-behaviour version the state was saved with
-  uint32_t compatFlags = 0;                   // ECompat bits (container v3 and later; 0 for older states)
+  uint32_t version = 0;                       // version that was read (0 = no block at all, which counts as the original)
+  uint32_t compatFlags = 0;                   // ECompat bits (v2 and later; 0 for the original)
   std::vector<SampleData::Slot> slots;
   bool valid = true;                          // false if the block was present but corrupt / truncated
 };
 
 template <class Chunk>
-void Write(Chunk& chunk, const std::vector<SampleData::Slot>& slots, uint32_t dspVersion = kLatestDspVersion, uint32_t compatFlags = 0)
+void Write(Chunk& chunk, const std::vector<SampleData::Slot>& slots, uint32_t compatFlags = 0)
 {
   uint32_t version = kLatestVersion;
   chunk.Put(&version);
-  chunk.Put(&dspVersion);
   chunk.Put(&compatFlags);
 
   uint32_t numSlots = static_cast<uint32_t>(slots.size());
@@ -217,21 +206,17 @@ int Read(const Chunk& chunk, int startPos, Data& out)
       }
     }
   }
-  else if (version >= 2 && version <= 4)
+  else if (version == 2)
   {
     uint32_t numSlots = 0;
-    if ((pos = chunk.Get(&out.dspVersion, pos)) < 0)
-      return fail();
-    if (version >= 3 && (pos = chunk.Get(&out.compatFlags, pos)) < 0)
+    if ((pos = chunk.Get(&out.compatFlags, pos)) < 0)
       return fail();
     if ((pos = chunk.Get(&numSlots, pos)) < 0 || numSlots > kMaxSlots)
       return fail();
     out.slots.resize(numSlots);
     for (auto& slot : out.slots)
     {
-      if (!detail::ReadSampleBytes(chunk, pos, slot) || !detail::ReadString<Str>(chunk, pos, slot.path) || !detail::ReadString<Str>(chunk, pos, slot.pipeline))
-        return fail();
-      if (version >= 4 && !detail::ReadEmbeddedSource(chunk, pos, slot))
+      if (!detail::ReadSampleBytes(chunk, pos, slot) || !detail::ReadString<Str>(chunk, pos, slot.path) || !detail::ReadString<Str>(chunk, pos, slot.pipeline) || !detail::ReadEmbeddedSource(chunk, pos, slot))
         return fail();
     }
   }
@@ -240,9 +225,9 @@ int Read(const Chunk& chunk, int startPos, Data& out)
     return fail(); // unknown (newer) version: don't guess
   }
 
-  // v1-v3 states saved empty slots too, but they were never added on load, so later samples moved up. Keep that
-  // behaviour for those versions. v4 keeps free slots where they are.
-  if (version < 4)
+  // v1 saved empty slots too, but they were never added on load, so later samples moved up. Keep that behaviour for v1.
+  // v2 keeps free slots where they are.
+  if (version == 1)
   {
     std::vector<SampleData::Slot> nonEmpty;
     for (auto& s : out.slots)

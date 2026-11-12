@@ -259,7 +259,7 @@ bool VaiaOneBitPlus::SerializeState(IByteChunk& chunk) const
   // Parameters first, then the versioned custom block (see src/StateFormat.h)
   bool ok = SerializeParams(chunk);
   const uint32_t compat = mDSP.mLegacyTiming.load() ? OneBitState::kCompatLegacyTiming : 0u;
-  OneBitState::Write(chunk, mDSP.mSampleManager.CopyDynamicSlots(), OneBitState::kLatestDspVersion, compat);
+  OneBitState::Write(chunk, mDSP.mSampleManager.CopyDynamicSlots(), compat);
   return ok;
 }
 
@@ -290,9 +290,9 @@ void VaiaOneBitPlus::ResetParam(int paramIdx, double value)
 
 void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
 {
-  if (data.dspVersion < 1)
+  if (data.version < OneBitState::kLatestVersion)
   {
-    // Saved by the original behaviour (version 0): keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz
+    // Saved by the original plugin (v1, or no block at all): keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz
     // speed). The user can switch this off in the editor.
     mDSP.mLegacyTiming = true;
 
@@ -314,9 +314,9 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
   }
 
   // The slots of Sampler Pitch and DC Filter used to be the retired "Input Dither" and "Input Protection" knobs, which could
-  // hold any value. Version 0 never followed pitch in the sampler and had no DC filter, so those projects load with the
+  // hold any value. The original never followed pitch in the sampler and had no DC filter, so those projects load with the
   // sampler pitch off and the DC filter on (the filter is part of the sound now).
-  if (data.dspVersion < 1)
+  if (data.version < OneBitState::kLatestVersion)
   {
     ResetParam(kParamSamplerPitch, 0.);
     ResetParam(kParamDcFilter, 1.);
@@ -724,7 +724,7 @@ void VaiaOneBitPlus::OnReset()
   mDiag.resets.fetch_add(1, std::memory_order_relaxed);
   mDiag.midiLogBudget.store(60); // log the first MIDI messages after every reset one by one
   mDiag.firstBlockLogged.store(false);
-  DiagnosticsLog("OneBitPlus: OnReset (host stop/start or setup) sampleRate=" + std::to_string(currentSampleRate) + " maxBlock=" + std::to_string(GetBlockSize()) + " build=" + __DATE__ + " " + __TIME__ + " dspVersion=" + std::to_string(OneBitState::kLatestDspVersion));
+  DiagnosticsLog("OneBitPlus: OnReset (host stop/start or setup) sampleRate=" + std::to_string(currentSampleRate) + " maxBlock=" + std::to_string(GetBlockSize()) + " build=" + __DATE__ + " " + __TIME__ + " stateVersion=" + std::to_string(OneBitState::kLatestVersion));
 #endif
 
   // 1. Reset DSP state and buffer allocations

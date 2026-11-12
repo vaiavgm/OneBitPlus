@@ -460,7 +460,7 @@ TEST(State_V2RoundTrip)
 
   OneBitState::Data d;
   int pos = OneBitState::Read<FakeStr>(c, 4, d);
-  CHECK(d.valid && d.version == OneBitState::kLatestVersion && d.dspVersion == OneBitState::kLatestDspVersion && d.compatFlags == 0);
+  CHECK(d.valid && d.version == OneBitState::kLatestVersion && d.compatFlags == 0);
   CHECK(d.slots.size() == 2);
   CHECK(d.slots[0].data == std::vector<int8_t>({1, 2, 3}) && d.slots[0].sampleRate == 48000 && d.slots[0].path == "a.wav" && d.slots[0].pipeline == "P1");
   CHECK(d.slots[1].path == "b.wav");
@@ -468,31 +468,16 @@ TEST(State_V2RoundTrip)
   CHECK(c.Get(&readTrailer, pos) > 0 && readTrailer == 99);
 }
 
-TEST(State_V3CarriesCompatFlags)
+TEST(State_CarriesCompatFlags)
 {
   FakeChunk c;
-  OneBitState::Write(c, {MakeSlot({5}, 44100, "a.wav", "")}, 1, OneBitState::kCompatLegacyTiming);
+  OneBitState::Write(c, {MakeSlot({5}, 44100, "a.wav", "")}, OneBitState::kCompatLegacyTiming);
   OneBitState::Data d;
   OneBitState::Read<FakeStr>(c, 0, d);
-  CHECK(d.valid && d.dspVersion == 1 && (d.compatFlags & OneBitState::kCompatLegacyTiming) && d.slots.size() == 1);
-
-  // a v2 block has no flags; its dspVersion field is read as written
-  FakeChunk v2;
-  uint32_t version = 2, dsp = 1, n = 1, sr = 48000, size = 1;
-  v2.Put(&version);
-  v2.Put(&dsp);
-  v2.Put(&n);
-  v2.Put(&sr);
-  v2.Put(&size);
-  int8_t byte = 3;
-  v2.PutBytes(&byte, 1);
-  v2.PutStr("p.wav");
-  v2.PutStr("");
-  OneBitState::Read<FakeStr>(v2, 0, d);
-  CHECK(d.valid && d.version == 2 && d.dspVersion == 1 && d.compatFlags == 0 && d.slots.size() == 1 && d.slots[0].path == "p.wav");
+  CHECK(d.valid && d.version == 2 && (d.compatFlags & OneBitState::kCompatLegacyTiming) && d.slots.size() == 1);
 }
 
-TEST(State_V4KeepsHolesAndEmbeddedSource)
+TEST(State_KeepsHolesAndEmbeddedSource)
 {
   SampleData::Slot a = MakeSlot({1, 2}, 44100, "a.wav", "normalize->deltasigma");
   SampleData::Slot hole; // free slot between two samples: the second keeps its velocity
@@ -549,7 +534,7 @@ TEST(State_ReadsV1)
   OneBitState::Data d;
   int pos = OneBitState::Read<FakeStr>(c, 0, d);
   CHECK(pos == c.Size());
-  CHECK(d.valid && d.version == 1 && d.dspVersion == OneBitState::kDspVersionLegacy);
+  CHECK(d.valid && d.version == OneBitState::kOriginalVersion && d.compatFlags == 0);
   CHECK(d.slots.size() == 2 && d.slots[0].data == std::vector<int8_t>({9, 8}) && d.slots[0].path == "x.wav" && d.slots[0].pipeline == "PX");
   CHECK(d.slots[1].sampleRate == 48000 && d.slots[1].path == "y.wav");
 }
@@ -559,9 +544,9 @@ TEST(State_V0AndCorrupt)
   FakeChunk empty;
   OneBitState::Data d;
   CHECK(OneBitState::Read<FakeStr>(empty, 0, d) == 0);
-  CHECK(d.version == 0 && d.valid && d.slots.empty() && d.dspVersion == OneBitState::kDspVersionLegacy);
+  CHECK(d.version == 0 && d.valid && d.slots.empty());
 
-  // truncated v2 block
+  // truncated block
   FakeChunk c;
   OneBitState::Write(c, {MakeSlot({1, 2, 3, 4}, 44100, "a.wav", "P")});
   c.bytes.resize(c.bytes.size() - 3);

@@ -150,11 +150,11 @@ enum EParams
 
   // DC Filter (on/off) reuses the slot of the retired "Input Protection" knob, which did nothing. iPlug2 saves and
   // restores parameters as a fixed-length run: removing or adding a slot would shift the rest of the saved state of every
-  // existing project. Old states may hold a stray value there, so states saved before dspVersion 1 get it set to ON when
+  // existing project. Old states may hold a stray value there, so states saved by the original plugin get it set to ON when
   // they are loaded (the filter is part of the sound now).
   kParamDcFilter,
   // Sampler Pitch (on/off) reuses the slot of the retired "Input Dither" knob. Old states may hold a stray value
-  // there, so states saved before dspVersion 1 get it reset to 0 (off) when they are loaded.
+  // there, so states saved by the original plugin get it reset to 0 (off) when they are loaded.
   kParamSamplerPitch,
 
   kNumParams

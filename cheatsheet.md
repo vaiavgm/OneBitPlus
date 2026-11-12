@@ -45,7 +45,7 @@ REAPER must not have the plugin loaded while copying (close the FX window or REA
 
 ## Diagnostics while testing in REAPER
 
-`ONEBIT_DIAGNOSTICS` in `src\Debug.h` is 0 by default (set it to 1 and rebuild to get the log). Run **DebugView** (Sysinternals) as administrator with "Capture Win32" on, filter for `OneBitPlus:`. The first line after loading is `OneBitPlus: OnReset ... build=<date time> dspVersion=1`: use it to check that you are running the build you just made. What each line means: `docs\BUILD.md`, section "Diagnostics".
+`ONEBIT_DIAGNOSTICS` in `src\Debug.h` is 0 by default (set it to 1 and rebuild to get the log). Run **DebugView** (Sysinternals) as administrator with "Capture Win32" on, filter for `OneBitPlus:`. The first line after loading is `OneBitPlus: OnReset ... build=<date time> stateVersion=2`: use it to check that you are running the build you just made. What each line means: `docs\BUILD.md`, section "Diagnostics".
 
 ## If the build fails
 
