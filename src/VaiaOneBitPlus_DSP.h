@@ -24,6 +24,7 @@
 
 #include "SampleData.h"
 #include "SampleOscillator.h"
+#include "src/HostTime.h"
 #include "src/Params.h"
 #include "VaiaOscillator.h"
 
@@ -495,6 +496,10 @@ public:
   {
     const bool legacyTiming = mLegacyTiming.load(std::memory_order_relaxed);
 
+    // Host values may be zero, NaN or garbage (see HostTime.h): never let them reach the LFOs unchecked
+    tempo = HostTime::SanitizeTempo(tempo);
+    qnPos = HostTime::SanitizePpq(qnPos);
+
     // Legacy projects: synced LFOs ran at a fixed 120 BPM (the plugin never passed the host tempo on)
     if (legacyTiming)
       tempo = 120.;
@@ -557,9 +562,11 @@ public:
     {
       for (int s = 0; s < nFrames; s++)
       {
-        const T x = outputs[0][s];
+        T x = outputs[0][s];
+        if (!std::isfinite(x))
+          x = 0; // one bad sample must not poison the filter state for good
         T y = x - mDcX1 + mDcR * mDcY1;
-        if (std::abs(y) < static_cast<T>(1e-9))
+        if (!std::isfinite(y) || std::abs(y) < static_cast<T>(1e-9))
           y = 0; // below -180 dB: true silence, and no denormals
         mDcX1 = x;
         mDcY1 = y;

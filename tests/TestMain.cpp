@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <chrono>
 #include <functional>
 #include <thread>
@@ -26,6 +27,7 @@
 #include "src/SamplesModel.h"
 #include "src/SamplesLayout.h"
 #include "src/SampleJobs.h"
+#include "src/HostTime.h"
 #include "src/SampleLoader.h"
 #include "src/SampleTools.h"
 
@@ -1280,6 +1282,17 @@ TEST(SampleJobs_AutoDcFindsAnOffsetAndTheRenderUsesIt)
   const double dcAfter = SampleRender::BitsDc(manager.GetSlot(0)->data);
   CHECK(std::fabs(dcBefore) > 0.25 && std::fabs(dcAfter) < 0.03);
   std::remove(wav.c_str());
+}
+
+// ---------------------------------------------------------------- HostTime
+TEST(HostTime_RejectsWhatTheHostMayLeaveUnset)
+{
+  const double inf = std::numeric_limits<double>::infinity(), nan = std::numeric_limits<double>::quiet_NaN();
+  CHECK(HostTime::SanitizeTempo(133.7) == 133.7 && HostTime::SanitizeTempo(1.0) == 1.0 && HostTime::SanitizeTempo(10000.0) == 10000.0);
+  for (double bad : {0.0, -5.0, 0.5, nan, inf, -inf, 1e30, 1e200, 10001.0})
+    CHECK(HostTime::SanitizeTempo(bad) == 120.0);
+  CHECK(HostTime::SanitizePpq(12.5) == 12.5 && HostTime::SanitizePpq(-1.0) == -1.0 && HostTime::SanitizePpq(0.0) == 0.0);
+  CHECK(HostTime::SanitizePpq(nan) == 0.0 && HostTime::SanitizePpq(inf) == 0.0 && HostTime::SanitizePpq(-inf) == 0.0);
 }
 
 // ---------------------------------------------------------------- BitCompression

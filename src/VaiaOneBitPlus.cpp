@@ -12,55 +12,13 @@
 #include <IPlugPaths.h>
 #include "src/PipelinePresets.h"
 #include "src/Debug.h"
+#include "src/ParamInit.h"
 
 VaiaOneBitPlus::VaiaOneBitPlus(const InstanceInfo& info)
   : Plugin(info, MakeConfig(kNumParams, kNumPresets))
 {
-  GetParam(kParamGain)->InitDouble("Gain", 50., 0., 100.0, 0.01, "%");
-  GetParam(kParamNoteGlideTime)->InitMilliseconds("Note Glide Time", 0., 0.0, 150.);
-
-  // retired param: kept only so that saved states keep their layout (see Params.h)
-  GetParam(kParamUnused1)->InitDouble("(unused 1)", 0., 0., 100., 1., "", IParam::kFlagCannotAutomate | IParam::kFlagMeta);
-  // Sampler Pitch: off = the sampler always plays at its recorded speed (the original behaviour)
-  GetParam(kParamSamplerPitch)->InitBool("Sampler Pitch", false);
-
-  // Instrument types I-IV: identical parameter blocks (see Params.h). Ranges, defaults and the order of
-  // the parameters are unchanged from the original per-type code. Only the display names got a "T<n>" prefix,
-  // so host automation lanes can be told apart. Parameter indices (what hosts store) are unchanged.
-  for (int t = 0; t < kNumTypes; ++t)
-  {
-    auto P = [this, t](int type1Param) { return GetParam(TypeParam(t, type1Param)); };
-    const std::string prefix = "T" + std::to_string(t + 1) + " ";
-    auto N = [&prefix](const char* name) { return prefix + name; };
-
-    P(kParamPwmAttack1)->InitDouble(N("PWM Attack").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    P(kParamPwmDecay1)->InitDouble(N("PWM Decay").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    P(kParamPwmSustain1)->InitDouble(N("PWM Sustain").c_str(), 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-    P(kParamPwmRelease1)->InitDouble(N("PWM Release").c_str(), 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-    P(kParamPwmLFOShape1)->InitEnum(N("PWM LFO Shape").c_str(), LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-    P(kParamPwmLFORateHz1)->InitFrequency(N("PWM LFO Rate Hz").c_str(), 1., 0.01, 40.);
-    P(kParamPwmLFORateTempo1)->InitEnum(N("PWM LFO Rate Sync").c_str(), LFO<>::k1, {LFO_TEMPODIV_VALIST});
-    P(kParamPwmLFORateMode1)->InitBool(N("PWM LFO Sync").c_str(), true);
-    P(kParamPwmLFODepth1)->InitPercentage(N("PWM LFO Depth").c_str());
-    P(kParamPwmModPow1)->InitDouble(N("PWM Mod").c_str(), 1.0, -2.0, 2.0, 0.05);
-    P(kParamPwmOffset1)->InitDouble(N("PWM Offset").c_str(), 0.5, 0.0025, 0.9975, 0.01);
-    P(kParamPwmKeyTrack1)->InitBool(N("PWM Keytrack").c_str(), false);
-
-    P(kParamPitchAttack1)->InitDouble(N("Pitch Attack").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    P(kParamPitchDecay1)->InitDouble(N("Pitch Decay").c_str(), 0., 0., 2000., 0.1, "ms", IParam::kFlagsNone, "ADSR", IParam::ShapePowCurve(3.));
-    P(kParamPitchSustain1)->InitDouble(N("Pitch Sustain").c_str(), 0., 0., 100., 1, "%", IParam::kFlagsNone, "ADSR");
-    P(kParamPitchRelease1)->InitDouble(N("Pitch Release").c_str(), 0., 0., 500., 0.1, "ms", IParam::kFlagsNone, "ADSR");
-    P(kParamPitchLFOShape1)->InitEnum(N("Pitch LFO Shape").c_str(), LFO<>::kTriangle, {LFO_SHAPE_VALIST});
-    P(kParamPitchLFORateHz1)->InitFrequency(N("Pitch LFO Rate Hz").c_str(), 1., 0.01, 40.);
-    P(kParamPitchLFORateTempo1)->InitEnum(N("Pitch LFO Rate Sync").c_str(), LFO<>::k1, {LFO_TEMPODIV_VALIST});
-    P(kParamPitchLFORateMode1)->InitBool(N("Pitch LFO Sync").c_str(), true);
-    P(kParamPitchLFODepth1)->InitPercentage(N("Pitch LFO Depth").c_str());
-    P(kParamPitchModPow1)->InitDouble(N("Pitch Mod").c_str(), 1, -4.0, 4.0, 0.05);
-    P(kParamPitchOffset1)->InitDouble(N("Pitch Offset").c_str(), 0.0, -1.0, 1.0, 0.01);
-    P(kParamPitchKeyTrack1)->InitDouble(N("Pitch Keytrack").c_str(), 0.0, -2.0, 2.0, 0.05);
-    P(kParamExtraUnison1)->InitInt(N("Extra Unison").c_str(), 1, 1, 8);
-    P(kParamExtraDetune1)->InitDouble(N("Extra Detune").c_str(), 0.0, 0.0, 100.0, 0.5);
-  }
+  // all parameter definitions and defaults live in ParamInit.h, so tests can use exactly the same ones
+  InitParams([this](int paramIdx) { return GetParam(paramIdx); });
 
   // Chain presets: saved per user (e.g. %APPDATA%/Vaiaphraim/OneBitPlus/Presets), plus a read-only shared folder
   // (e.g. C:/ProgramData/Vaiaphraim/OneBitPlus/Presets) that an installer can fill.
@@ -622,8 +580,8 @@ void VaiaOneBitPlus::ProcessBlock(sample** inputs, sample** outputs, int nFrames
   memset(outputs[0], 0, nFrames * sizeof(sample));
   memset(outputs[1], 0, nFrames * sizeof(sample));
 
-  const double tempo = mTimeInfo.mTempo > 0. ? mTimeInfo.mTempo : 120.; // hosts that report no tempo keep the old default
-  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, tempo);
+  // the DSP validates the host's tempo and position (HostTime.h): hosts may leave them unset while stopped
+  mDSP.ProcessBlock(inputs, outputs, 2, nFrames, mTimeInfo.mPPQPos, mTimeInfo.mTransportIsRunning, mTimeInfo.mTempo);
 
   // visualisation only (lock-free, no allocation)
   mMeterSender.ProcessBlock(outputs, nFrames, kCtrlTagMeter);

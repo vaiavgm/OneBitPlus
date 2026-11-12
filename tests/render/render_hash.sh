@@ -19,3 +19,9 @@ clang++ -std=c++20 -O1 -w -DIPLUG_DSP=1 -DAPP_API -include memory -I. -Isrc \
 # Sampler Pitch on (off in all runs above)
 "$OUT" 48000 samplerpitch
 "$OUT" 44100 samplerpitch
+
+# A fresh instance (the plugin's real parameter defaults) must make sound whatever the host reports. Exits non-zero otherwise.
+clang++ -std=c++20 -O1 -w -DIPLUG_DSP=1 -DAPP_API -include memory -I. -Isrc \
+  -I"$IP/IPlug" -I"$IP/IPlug/Extras" -I"$IP/IPlug/Extras/Synth" -I"$IP/WDL" \
+  tests/render/FreshInstance.cpp "$IP/IPlug/IPlugParameter.cpp" "$IP/IPlug/Extras/Synth/MidiSynth.cpp" "$IP/IPlug/Extras/Synth/VoiceAllocator.cpp" -o "$(dirname "$OUT")/FreshInstance"
+"$(dirname "$OUT")/FreshInstance"
