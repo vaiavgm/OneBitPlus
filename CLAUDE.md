@@ -10,6 +10,7 @@ A polyphonic **1-bit synth and sampler** plugin (VST3 first) built on **iPlug2**
 | File map, signal flow, invariants, threading, state format | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | How to build, supported targets, scripts, unit tests | [docs/BUILD.md](docs/BUILD.md) · `tests/` |
 | Known bugs, gaps, performance issues, clean-up plan | [docs/ANALYSIS.md](docs/ANALYSIS.md) |
+| Commands on the user's Windows machine (local repo path `E:\iPlug2\Projects\VaiaOneBitPlus`, build, install, diagnostics). Add new ones there; always use full paths | [cheatsheet.md](cheatsheet.md) |
 
 ## Ground rules
 
