@@ -290,10 +290,10 @@ void VaiaOneBitPlus::ResetParam(int paramIdx, double value)
 
 void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
 {
-  if (data.dspVersion < 2)
+  if (data.dspVersion < 1)
   {
-    // Saved by the original behaviour: keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz speed).
-    // The user can switch this off in the editor.
+    // Saved by the original behaviour (version 0): keep its timing (fixed 120 BPM for synced LFOs, samples at 44.1 kHz
+    // speed). The user can switch this off in the editor.
     mDSP.mLegacyTiming = true;
 
     // The Release stages of both envelopes (and Pitch Keytrack) did nothing before (the voice was cut off at note-off), so whatever
@@ -313,15 +313,14 @@ void VaiaOneBitPlus::ApplyMigrations(const OneBitState::Data& data)
     mDSP.mLegacyTiming = (data.compatFlags & OneBitState::kCompatLegacyTiming) != 0;
   }
 
-  // The slot of Sampler Pitch used to be the retired "Input Dither" knob, which could hold any value. Before
-  // dspVersion 3 the sampler never followed pitch, so such projects must load with it off.
-  if (data.dspVersion < 3)
+  // The slots of Sampler Pitch and DC Filter used to be the retired "Input Dither" and "Input Protection" knobs, which could
+  // hold any value. Version 0 never followed pitch in the sampler and had no DC filter, so those projects load with the
+  // sampler pitch off and the DC filter on (the filter is part of the sound now).
+  if (data.dspVersion < 1 || data.resetNewParams)
+  {
     ResetParam(kParamSamplerPitch, 0.);
-
-  // The slot of DC Filter used to be the retired "Input Protection" knob, which could hold any value (0 for almost every
-  // project). The filter is part of the sound, so projects saved before dspVersion 4 load with it on.
-  if (data.dspVersion < 4)
     ResetParam(kParamDcFilter, 1.);
+  }
 }
 
 SamplesLayout::SlotInfo VaiaOneBitPlus::SlotInfoFor(int slot) const

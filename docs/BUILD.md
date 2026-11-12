@@ -42,7 +42,7 @@ tests/headless/build_and_run.sh /path/to/iPlug2
 
 ### Diagnostics when something goes wrong in a host
 
-`ONEBIT_DIAGNOSTICS` (`src/Debug.h`) is **1 during testing**: the plugin writes lines starting with `OneBitPlus:` to the Windows debug output (read them with DebugView from Sysinternals, with "Capture Win32" on). Set it to 0 for a release build; it costs nothing then.
+`ONEBIT_DIAGNOSTICS` (`src/Debug.h`) is **0 by default** (set it to 1 for testing): the plugin writes lines starting with `OneBitPlus:` to the Windows debug output (read them with DebugView from Sysinternals, with "Capture Win32" on). Set it to 0 for a release build; it costs nothing then.
 
 - `OnReset ...`: every host stop/start or setup, with sample rate, maximum block size, the build time and the state version. Use it to check that you are running the build you think you are.
 - `FIRST BLOCK since reset`: the first block the host processes, with the transport state, tempo and position as the host reports them. If it never appears, the host does not call the plugin.

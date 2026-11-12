@@ -476,7 +476,7 @@ TEST(State_V3CarriesCompatFlags)
   OneBitState::Read<FakeStr>(c, 0, d);
   CHECK(d.valid && d.dspVersion == 1 && (d.compatFlags & OneBitState::kCompatLegacyTiming) && d.slots.size() == 1);
 
-  // a v2 block (written by clean-up builds before the sound changes) has no flags and counts as dspVersion 1
+  // a v2 block (written by test builds before the sound changes, old numbering 1) has no flags and counts as dspVersion 0 (original)
   FakeChunk v2;
   uint32_t version = 2, dsp = 1, n = 1, sr = 48000, size = 1;
   v2.Put(&version);
@@ -489,7 +489,17 @@ TEST(State_V3CarriesCompatFlags)
   v2.PutStr("p.wav");
   v2.PutStr("");
   OneBitState::Read<FakeStr>(v2, 0, d);
-  CHECK(d.valid && d.version == 2 && d.dspVersion == 1 && d.compatFlags == 0 && d.slots.size() == 1 && d.slots[0].path == "p.wav");
+  CHECK(d.valid && d.version == 2 && d.dspVersion == 0 && !d.resetNewParams && d.compatFlags == 0 && d.slots.size() == 1 && d.slots[0].path == "p.wav");
+
+  // test-build numbering: 3 (sampler pitch) -> 1, and it asks for the new params to be reset; 4 -> 1 without
+  for (uint32_t old : {3u, 4u})
+  {
+    FakeChunk t;
+    uint32_t v = 3, flags = 0, zero = 0;
+    t.Put(&v); t.Put(&old); t.Put(&flags); t.Put(&zero);
+    OneBitState::Read<FakeStr>(t, 0, d);
+    CHECK(d.valid && d.dspVersion == 1 && d.resetNewParams == (old == 3));
+  }
 }
 
 TEST(State_V4KeepsHolesAndEmbeddedSource)
@@ -511,7 +521,7 @@ TEST(State_V4KeepsHolesAndEmbeddedSource)
   OneBitState::Write(ch, {a, hole, b, c});
   OneBitState::Data d;
   CHECK(OneBitState::Read<FakeStr>(ch, 0, d) == ch.Size());
-  CHECK(d.valid && d.version == 4 && d.slots.size() == 4);
+  CHECK(d.valid && d.version == OneBitState::kLatestVersion && d.slots.size() == 4);
   CHECK(d.slots[1].Empty() && d.slots[2].path == "b.wav"); // the hole is kept
   CHECK(d.slots[0].source == nullptr && !d.slots[0].embedSource);
   CHECK(d.slots[2].embedSource && d.slots[2].source && d.slots[2].source->sampleRate == 22050);

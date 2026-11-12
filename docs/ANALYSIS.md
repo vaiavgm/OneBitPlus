@@ -176,9 +176,9 @@ Decisions (from review):
 
 ## 5. Legacy projects and migration (Phase 6)
 
-Saved states carry a sound-behaviour version (`dspVersion`, see `src/StateFormat.h`). Everything saved by the original code (and by clean-up builds before Phase 6) counts as version 1.
+Saved states carry a sound-behaviour version (`dspVersion`, see `src/StateFormat.h`). Everything saved by the original code counts as version 0; everything the clean-up changed is version 1.
 
-| What changed | Legacy project (loaded, version 1) | New instance |
+| What changed | Legacy project (loaded, version 0) | New instance |
 |---|---|---|
 | Release stages (B9) | the 8 Release values are reset to 0 on load, so the sound is identical | release works |
 | Pitch Keytrack | the 4 values are reset to 0 on load (the knob did nothing before) | works |
@@ -186,8 +186,8 @@ Saved states carry a sound-behaviour version (`dspVersion`, see `src/StateFormat
 | Sample playback speed (B4) | **"Legacy timing" switch on**: as if every sample was 44.1 kHz | the sample's own rate |
 | Smoothing time | **"Legacy timing" switch on**: the old (48 kHz) coefficients | follows the sample rate |
 | Dither / Input Protection | removed; the two parameter slots stay so the saved parameter run keeps its length, and both are reused: Input Protection became **DC Filter** and Input Dither became **Sampler Pitch** (see the two rows below) | same |
-| Sampler Pitch (new, `dspVersion` 3) | loads **off**: the slot used to be the retired Dither knob, so states before version 3 get it reset to 0 | off by default; it is an ordinary parameter, so it is saved with each project and later changes of the default can't affect saved projects |
-| DC filter (`dspVersion` 4) | a 10 Hz high-pass on the output, **ON** for every project: the slot used to be the retired Input Protection knob, so states before version 4 get it set to ON. A **DC filter** switch (under the drop box) turns it off, for comparing with a host's own DC filter; the choice is saved with the project. The switch is temporary: the final build probably has no way to turn it off. | on by default |
+| Sampler Pitch (new, version 1) | loads **off**: the slot used to be the retired Dither knob, so version 0 states get it reset to 0 | off by default; it is an ordinary parameter, so it is saved with each project and later changes of the default can't affect saved projects |
+| DC filter (version 1) | a 10 Hz high-pass on the output, **ON** for every project: the slot used to be the retired Input Protection knob, so version 0 states get it set to ON. A **DC filter** switch (under the drop box) turns it off, for comparing with a host's own DC filter; the choice is saved with the project. The switch is temporary: the final build probably has no way to turn it off. | on by default |
 
 The switch is saved with the project. A migrated project keeps sounding like before until the user turns the switch off, and what to do with an old project then is up to them. **Proof:** the render harness (`tests/render/`) shows that the new code in legacy mode with the DC filter off reproduces the original code bit for bit (host tempo 140, transport stopping halfway, tempo-synced LFOs, sampler, unison, 48 and 44.1 kHz).
 
